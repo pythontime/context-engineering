@@ -4405,7 +4405,7 @@ Tailor your response for a {audience} audience."""
             result_type=SchematicExplanation,
             temperature=0.3,
             max_tokens=1024,
-            model_preferences=["claude-sonnet-4-20250514", "claude-haiku-4-20250414"],
+            # model_preferences=["claude-sonnet-4-20250514", "claude-haiku-4-20250414"],
         )
     except Exception as e:
         # Return structured error instead of raising, consistent with other tools

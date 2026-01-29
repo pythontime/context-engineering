@@ -1,11 +1,14 @@
 {
   "mcpServers": {
-    "warnerco-schematica": {
+    "warnerco-schematica-claude": {
       "command": "uv",
       "args": ["run", "warnerco-mcp"],
-      "cwd": "./src/warnerco/backend",
+      "cwd": "C:/github/context-engineering/src/warnerco/backend",
       "env": {
         "MEMORY_BACKEND": "chroma"
+      },
+      "permissions": {
+        "sampling": "allowed"
       }
     }
   }
