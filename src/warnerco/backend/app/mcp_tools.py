@@ -4398,46 +4398,103 @@ Tailor your response for a {audience} audience."""
     #   max_tokens: Enough room for a thorough explanation
     #   model_preferences: Hint to use a capable model (client may ignore)
 
+    # -------------------------------------------------------------------------
+    # Two-pass sampling strategy:
+    #
+    # Pass 1 (preferred): Use result_type for validated structured output.
+    #   This creates a synthetic 'final_response' tool internally, which
+    #   requires the client to advertise the 'sampling.tools' capability.
+    #   Clients like Claude Desktop and FastMCP Client support this.
+    #
+    # Pass 2 (fallback): If the client lacks 'sampling.tools' (e.g., MCP
+    #   Inspector), retry WITHOUT result_type and ask the LLM to return
+    #   JSON in plain text. We then parse and validate manually.
+    #
+    # This pattern ensures the tool works across all MCP clients that
+    # support basic sampling, while still using structured output when
+    # available.
+    # -------------------------------------------------------------------------
+    import json as _json
+
+    explanation: SchematicExplanation | None = None
+
     try:
+        # Pass 1: Structured sampling (requires sampling.tools capability)
         sampling_result = await ctx.sample(
             messages=user_message,
             system_prompt=system_prompt,
             result_type=SchematicExplanation,
             temperature=0.3,
             max_tokens=1024,
-            # model_preferences=["claude-sonnet-4-20250514", "claude-haiku-4-20250414"],
         )
-    except Exception as e:
-        # Return structured error instead of raising, consistent with other tools
-        await ctx.info(f"LLM sampling failed: {e}")
-        return SchematicExplainerResult(
-            schematic_id=schematic.id,
-            model=schematic.model,
-            name=schematic.name,
-            component=schematic.component,
-            category=schematic.category,
-            status=schematic.status.value,
-            explanation=SchematicExplanation(
-                plain_language_summary=(
-                    f"Sampling failed: {e}. "
-                    "Ensure the MCP client supports sampling and has a model configured."
-                ),
-                key_capabilities=[],
-                typical_failure_modes=[],
-                maintenance_tips=[],
-                integration_notes="N/A - sampling unavailable",
-                safety_considerations="N/A - sampling unavailable",
-            ),
-            graph_context=graph_relationships,
-            sampling_metadata={
-                "error": str(e),
-                "audience": audience,
-                "generated_at": datetime.now(timezone.utc).isoformat(),
-            },
+        explanation = getattr(sampling_result, "result", None)
+
+    except Exception as structured_err:
+        # Pass 1 failed — likely because the client doesn't support
+        # sampling.tools. Fall back to plain-text JSON sampling.
+        await ctx.info(
+            f"Structured sampling unavailable ({structured_err}), "
+            "falling back to plain-text JSON sampling"
         )
 
-    # sampling_result.result is a validated SchematicExplanation object
-    explanation = getattr(sampling_result, "result", None)
+        try:
+            # Build a JSON schema hint so the LLM knows the expected format
+            schema_hint = SchematicExplanation.model_json_schema()
+            fallback_message = (
+                f"{user_message}\n\n"
+                "IMPORTANT: Respond ONLY with valid JSON (no markdown fences, no preamble) "
+                f"matching this JSON schema:\n{_json.dumps(schema_hint, indent=2)}"
+            )
+
+            # Pass 2: Plain text sampling (works with any sampling-capable client)
+            sampling_result = await ctx.sample(
+                messages=fallback_message,
+                system_prompt=system_prompt,
+                temperature=0.3,
+                max_tokens=1024,
+            )
+
+            # Parse the plain-text JSON into a validated Pydantic model
+            raw_text = sampling_result.text.strip()
+            # Strip markdown code fences if the LLM added them
+            if raw_text.startswith("```"):
+                raw_text = raw_text.split("\n", 1)[1] if "\n" in raw_text else raw_text
+                if raw_text.endswith("```"):
+                    raw_text = raw_text[:-3].strip()
+
+            explanation = SchematicExplanation.model_validate_json(raw_text)
+            await ctx.info("Plain-text JSON fallback succeeded")
+
+        except Exception as fallback_err:
+            # Both passes failed — sampling is completely unavailable
+            await ctx.info(f"All sampling attempts failed: {fallback_err}")
+            return SchematicExplainerResult(
+                schematic_id=schematic.id,
+                model=schematic.model,
+                name=schematic.name,
+                component=schematic.component,
+                category=schematic.category,
+                status=schematic.status.value,
+                explanation=SchematicExplanation(
+                    plain_language_summary=(
+                        f"Sampling failed: {structured_err}. "
+                        f"Fallback also failed: {fallback_err}. "
+                        "Ensure the MCP client supports sampling and has a model configured."
+                    ),
+                    key_capabilities=[],
+                    typical_failure_modes=[],
+                    maintenance_tips=[],
+                    integration_notes="N/A - sampling unavailable",
+                    safety_considerations="N/A - sampling unavailable",
+                ),
+                graph_context=graph_relationships,
+                sampling_metadata={
+                    "error": str(structured_err),
+                    "fallback_error": str(fallback_err),
+                    "audience": audience,
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
     if explanation is None:
         await ctx.info("Sampling returned no structured result")
         return SchematicExplainerResult(
