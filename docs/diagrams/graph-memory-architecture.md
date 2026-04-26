@@ -112,16 +112,37 @@ Relationship (edge):
   - metadata: dict (timestamp, confidence, source)
 ```
 
+#### Current Graph Statistics
+
+The indexed graph (built from `data/schematics/schematics.json` via `scripts/index_graph.py`) contains:
+
+| Metric | Count |
+|--------|-------|
+| **Entities (nodes)** | 117 |
+| **Relationships (edges)** | 221 |
+| **Distinct predicates** | 6 |
+
+**Entity type breakdown**:
+
+| Type | Count | Notes |
+|------|-------|-------|
+| schematic | 25 | Source robot schematics |
+| tag | 56 | Free-form tags extracted from schematic metadata |
+| category | 12 | Robot categories (e.g. industrial, service) |
+| component | 12 | Components inferred from descriptions |
+| model | 9 | Robot model families |
+| status | 3 | Lifecycle states (active, deprecated, draft) |
+
 #### Supported Predicates
 
-| Predicate | Description | Example |
-|-----------|-------------|---------|
-| `depends_on` | Component dependency | WRN-00001 depends_on POW-SYSTEM |
-| `contains` | Containment relationship | WC-100 contains WRN-00001 |
-| `has_status` | Status assignment | WRN-00003 has_status active |
-| `manufactured_by` | Manufacturing relationship | WRN-00001 manufactured_by WARNERCO |
-| `compatible_with` | Compatibility link | WRN-00005 compatible_with WRN-00001 |
-| `related_to` | General association | WRN-00004 related_to WRN-00007 |
+| Predicate | Direction | Example |
+|-----------|-----------|---------|
+| `has_tag` | Schematic -> Tag | WRN-00001 has_tag thermal |
+| `compatible_with` | Schematic <-> Schematic (same model) | WRN-00005 compatible_with WRN-00001 |
+| `belongs_to_model` | Schematic -> Model | WRN-00001 belongs_to_model WC-100 |
+| `has_status` | Schematic -> Status | WRN-00003 has_status active |
+| `has_category` | Schematic -> Category | WRN-00001 has_category industrial |
+| `contains` | Schematic -> Component (inferred) | WRN-00001 contains POW-SYSTEM |
 
 ### LangGraph Flow Integration
 
@@ -240,7 +261,8 @@ src/warnerco/backend/
 │   │   └── flow.py               # Updated with query_graph node
 │   └── mcp_tools.py              # Updated with 4 graph tools
 ├── data/
-│   └── graph.db                  # SQLite graph database
+│   └── graph/
+│       └── knowledge.db          # SQLite graph database (117 entities, 221 edges)
 └── scripts/
     └── index_graph.py            # Graph indexing script
 ```

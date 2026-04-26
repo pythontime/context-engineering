@@ -12,11 +12,12 @@ flowchart TB
         DASH["/dash/* SPA"]
     end
 
-    subgraph Tools["🔧 MCP Tools (12 Core)"]
+    subgraph Tools["🔧 MCP Tools (23 Total)"]
         direction TB
-        VT["Vector Tools\nlist, get, search, stats"]
+        VT["Vector + CRUD Tools\nlist, get, search, stats\ncreate, update, delete\nindex, compare, guided, feedback"]
         GT["Graph Tools\nadd_rel, neighbors, path, stats"]
         ST["Scratchpad Tools\nwrite, read, clear, stats"]
+        MT["Meta Tools\nwarn_search_tools\nwarn_describe_tool"]
     end
 
     subgraph Pipeline["🔄 LangGraph 7-Node Pipeline"]
@@ -59,7 +60,7 @@ flowchart TB
 
     class CD,VSC,INSP client
     class API,MCP,DASH api
-    class VT,GT,ST tool
+    class VT,GT,ST,MT tool
     class N1,N2,N3,N4,N5,N6,N7 pipeline
     class VS,GS,SP memory
     class JSON,GRAPH data

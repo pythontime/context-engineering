@@ -24,6 +24,10 @@ Agentic robot schematics system with semantic memory. Features LangGraph orchest
 
 ## Quick Start
 
+### Prerequisites
+
+- **Python 3.13** (pinned via `.python-version`). `onnxruntime` (a `chromadb` dependency) does not yet ship 3.14 wheels.
+
 ### Using uv (Recommended for Local Development)
 
 ```bash
@@ -40,6 +44,9 @@ uv run warnerco-serve
 
 # Run MCP stdio server (for Claude Desktop)
 uv run warnerco-mcp
+
+# Free port 8000 and restart the HTTP server (cross-platform)
+uv run warnerco-restart
 ```
 
 ### Using Poetry
@@ -99,6 +106,8 @@ Create `.vscode/mcp.json` in your workspace:
 
 ## Available MCP Tools
 
+The server exposes **23 MCP tools** across vector/schema, knowledge graph, scratchpad, and tool-discovery surfaces.
+
 | Tool | Description |
 |------|-------------|
 | `warn_list_robots` | List robot schematics with optional filtering |
@@ -113,6 +122,35 @@ Create `.vscode/mcp.json` in your workspace:
 | `warn_scratchpad_read` | Retrieve session entries with filtering |
 | `warn_scratchpad_clear` | Clear session entries by subject or age |
 | `warn_scratchpad_stats` | Token budget and savings statistics |
+| `warn_search_tools` | Keyword-search the tool catalog at `name`, `summary`, or `full` detail |
+| `warn_describe_tool` | Return name, description, and input/output schema for a single tool |
+
+### Progressive Tool Loading
+
+`warn_search_tools` and `warn_describe_tool` implement Anthropic's progressive tool-loading pattern: instead of paying the full schema tax up front, clients discover tools cheaply and fetch detail on demand. Both tools deliberately exclude themselves and each other from results to avoid recursive confusion.
+
+Measured on this server:
+
+| Detail level | Tokens | Saving vs. full |
+|--------------|--------|-----------------|
+| Full schemas (all 23 tools) | ~9,064 | baseline |
+| `summary` index | ~533 | ~95% |
+| `name`-only index | ~176 | ~98% |
+
+Example calls:
+
+```python
+# 1. Cheap discovery: which tools handle the graph?
+warn_search_tools(query="graph", detail="summary", limit=10)
+
+# 2. Even cheaper: just the names
+warn_search_tools(query="scratchpad", detail="name")
+
+# 3. On-demand detail for a single tool
+warn_describe_tool(name="warn_graph_path")
+```
+
+`warn_describe_tool` raises `ValueError` for unknown tool names.
 
 ## API Endpoints
 
@@ -152,6 +190,34 @@ uv run ruff check .
 # Format
 uv run ruff format .
 ```
+
+### Restarting the HTTP server
+
+`warnerco-restart` (source: `scripts/restart_server.py`) is a cross-platform helper that frees a port and relaunches the HTTP server. It refuses to kill its own PID.
+
+```bash
+# Free port 8000 (or $PORT) and relaunch warnerco-serve
+uv run warnerco-restart
+
+# Use a custom port
+uv run warnerco-restart --port 8080
+
+# Free the port without relaunching
+uv run warnerco-restart --kill-only
+uv run warnerco-restart --no-start
+```
+
+Implementation: Windows uses `netstat -ano` plus `taskkill /F /T /PID`; POSIX uses `lsof -t` plus `SIGKILL`. Exits `0` if the port was freed, `1` otherwise.
+
+### Knowledge Graph
+
+The graph database lives at `data/graph/knowledge.db` and is populated by:
+
+```bash
+uv run python scripts/index_graph.py
+```
+
+Current contents: **117 entities** (25 schematic, 12 category, 12 component, 9 model, 56 tag, 3 status) and **221 relationships** (`has_tag`: 75, `compatible_with`: 50, `belongs_to_model`: 25, `has_category`: 25, `has_status`: 25, `contains`: 21).
 
 ## Docker
 

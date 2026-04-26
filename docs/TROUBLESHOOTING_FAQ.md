@@ -9,9 +9,9 @@ This FAQ addresses the most common issues students encounter during the course. 
 ```bash
 # For WARNERCO Schematica (Python)
 cd src/warnerco/backend
-python --version   # Should show 3.11+
+python --version   # Should show 3.13.x (NOT 3.14)
 uv --version       # Should show 0.4+
-uv sync            # Reinstall dependencies
+uv sync            # Reinstall dependencies (uses .python-version = 3.13)
 
 # For Lab 01 (JavaScript)
 cd labs/lab-01-hello-mcp/starter
@@ -19,10 +19,12 @@ node --version && npm --version && npm list @modelcontextprotocol/sdk
 ```
 
 Expected output:
-- Python: 3.11.x or higher
+- Python: 3.13.x exactly (the repo's `.python-version` is pinned to 3.13)
 - uv: 0.4.x or higher
 - Node: v20.x.x or higher (for labs)
 - MCP SDK: 1.x.x (for labs)
+
+> **Heads-up: Python 3.14 is not supported yet.** ChromaDB depends on `onnxruntime`, which has not published 3.14 wheels at the time of writing. If `uv sync` explodes with a long onnxruntime build error, check `python --version` - you are almost certainly on 3.14. Run `uv python install 3.13` and re-sync.
 
 ---
 
@@ -71,6 +73,24 @@ cd src/warnerco/backend
 uv sync --force-reinstall
 ```
 
+### Q: `uv sync` fails building onnxruntime / chromadb
+
+**Problem**: You are on Python 3.14. `onnxruntime` (a chromadb dependency) does not have 3.14 wheels yet, so uv tries to compile from source and fails.
+
+**Solution**:
+
+```bash
+# Install Python 3.13 via uv
+uv python install 3.13
+
+# From the backend folder, re-create the venv on 3.13
+cd src/warnerco/backend
+uv sync                # honors .python-version (3.13)
+
+# Verify
+uv run python --version   # 3.13.x
+```
+
 ### Q: Server starts but API returns empty results
 
 **Problem**: Schematics data file missing or corrupted.
@@ -97,11 +117,57 @@ cd src/warnerco/backend
 uv run python -c "from app.adapters.chroma_store import ChromaMemoryStore; import asyncio; asyncio.run(ChromaMemoryStore().index_all())"
 ```
 
-### Q: Port 8000 already in use
+### Q: Graph queries return "graph is empty" or "entity not found"
 
-**Problem**: Another process is using port 8000.
+**Problem**: The knowledge graph has not been built, or you are looking at the wrong file.
+
+**Note on path**: The graph SQLite database lives at `src/warnerco/backend/data/graph/knowledge.db` (folder `data/graph/`, file `knowledge.db`). Older docs referenced `data/graph.db` at the top level - that path no longer exists.
 
 **Solution**:
+
+```bash
+cd src/warnerco/backend
+
+# (Re-)index the graph from schematics.json
+uv run python scripts/index_graph.py
+
+# Verify the file exists
+ls data/graph/knowledge.db   # macOS/Linux
+dir data\graph\knowledge.db  # Windows
+
+# Sanity check via MCP
+uv run python -c "import asyncio; from app.mcp_tools import warn_graph_stats; print(asyncio.run(warn_graph_stats.fn()))"
+```
+
+If you need a clean rebuild, delete the file and re-run `index_graph.py`:
+
+```bash
+rm src/warnerco/backend/data/graph/knowledge.db   # or `del` on Windows
+uv run python scripts/index_graph.py
+```
+
+### Q: Port 8000 already in use / "server won't start"
+
+**Problem**: A previous Uvicorn process (or anything else) is still bound to port 8000. This is especially common on Windows after Ctrl+C with the autoreloader on.
+
+**Preferred solution - use the bundled console script**:
+
+```bash
+cd src/warnerco/backend
+
+# Force-kill anything on port 8000 AND restart the HTTP server
+uv run warnerco-restart
+
+# Just free the port, do not restart
+uv run warnerco-restart --kill-only
+
+# Use a different port
+uv run warnerco-restart --port 9000
+```
+
+`warnerco-restart` exits 0 when the port is free (or was successfully freed) and exits 1 if it could not kill the holder.
+
+**Manual fallback**:
 
 ```powershell
 # Windows - find and kill process on port 8000
@@ -212,6 +278,18 @@ npm install
 ---
 
 ## MCP Server Won't Start
+
+### Q: WARNERCO HTTP server won't start - port already in use
+
+**Quick fix** (Windows-friendly): the backend ships a console script that kills the holder and restarts:
+
+```bash
+cd src/warnerco/backend
+uv run warnerco-restart              # kill port 8000, then start uvicorn
+uv run warnerco-restart --kill-only  # just free the port
+```
+
+See "Port 8000 already in use" above for the full set of options. Use this any time you see `[Errno 10048]` on Windows or `Address already in use` on macOS/Linux.
 
 ### Q: Server crashes immediately with "MODULE_NOT_FOUND"
 
@@ -1185,8 +1263,8 @@ Found a solution to a problem not listed here? Please:
 
 ---
 
-**Last Updated**: Pre-course preparation
+**Last Updated**: 2026-04-26
 **Maintainer**: Course instructor
-**Version**: 1.0
+**Version**: 1.1 (Python 3.13 pin, `data/graph/knowledge.db` path, `warnerco-restart`, 23 MCP tools)
 
 

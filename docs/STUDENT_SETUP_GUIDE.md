@@ -7,7 +7,7 @@ Welcome! This guide will help you prepare your environment **before** the traini
 By the end of this guide, you'll have:
 
 - Node.js 20+ installed and verified
-- Python 3.11+ with uv package manager installed
+- Python 3.13 with uv package manager installed (3.13 is required - see note below)
 - Docker Desktop running (optional, for Azure deployment labs)
 - Claude Desktop or VS Code with GitHub Copilot configured
 - Repository cloned and WARNERCO Schematica running
@@ -71,43 +71,51 @@ npm --version
 
 ---
 
-## Step 2: Install Python 3.11+ with uv Package Manager
+## Step 2: Install Python 3.13 with uv Package Manager
 
-**Note**: Python with uv is required for the WARNERCO Schematica server (the primary teaching example).
+**Note**: Python 3.13 with uv is required for the WARNERCO Schematica server (the primary teaching example). The repo's `.python-version` file pins 3.13 and `uv sync` will honor it.
+
+> **Why not 3.14?** ChromaDB depends on `onnxruntime`, which does not yet ship Python 3.14 wheels. If you let uv pick 3.14, `uv sync` fails loudly while building onnxruntime. Stay on 3.13 until upstream catches up. uv will auto-download 3.13 if it's not on your PATH.
 
 ### Windows
 
 ```powershell
 # Download from python.org or use winget
-winget install Python.Python.3.12
+winget install Python.Python.3.13
 
 # Verify Python
-python --version  # Should show 3.11 or higher
+python --version  # Should show 3.13.x
 
 # Install uv package manager
 irm https://astral.sh/uv/install.ps1 | iex
 
 # Restart your terminal, then verify uv
 uv --version
+
+# Optional: let uv install Python 3.13 for you
+uv python install 3.13
 ```
 
 ### macOS/Linux
 
 ```bash
 # macOS
-brew install python@3.12
+brew install python@3.13
 
 # Ubuntu/Debian
-sudo apt update && sudo apt install python3.12 python3-pip
+sudo apt update && sudo apt install python3.13 python3-pip
 
 # Verify Python
-python3 --version
+python3 --version  # Should show 3.13.x
 
 # Install uv package manager
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Restart your terminal, then verify uv
 uv --version
+
+# Optional: let uv install Python 3.13 for you
+uv python install 3.13
 ```
 
 ---
@@ -313,7 +321,8 @@ cd src/warnerco/backend
 # Start with MCP Inspector (opens browser at http://localhost:5173)
 npx @modelcontextprotocol/inspector uv run warnerco-mcp
 
-# You should see 4+ tools listed: warn_list_robots, warn_get_robot, etc.
+# You should see 23 tools listed: warn_list_robots, warn_get_robot,
+# warn_search_tools, warn_describe_tool, the graph/scratchpad tools, etc.
 # Press Ctrl+C to stop
 ```
 
@@ -336,7 +345,7 @@ Complete this checklist **before** the training:
 
 - [ ] Node.js 20+ installed (`node --version`)
 - [ ] npm working (`npm --version`)
-- [ ] Python 3.11+ installed (`python --version` or `python3 --version`)
+- [ ] Python 3.13 installed (`python --version` or `python3 --version`) - NOT 3.14 (onnxruntime has no 3.14 wheels yet)
 - [ ] uv package manager installed (`uv --version`)
 - [ ] Docker Desktop running (optional, `docker ps`)
 - [ ] Repository cloned (`cd context-engineering`)
@@ -394,20 +403,27 @@ npm install
 
 ### Issue: Port already in use
 
-**Solution**:
+**Solution (WARNERCO server, port 8000)**: use the bundled console script:
 
 ```bash
+cd src/warnerco/backend
 
-# Find and kill processes on port 3000 (or relevant port)
+# Kill anything on port 8000 AND restart the HTTP server
+uv run warnerco-restart
+
+# Or just free the port without restarting
+uv run warnerco-restart --kill-only
+```
+
+**Manual fallback** (other ports):
+
+```bash
 # macOS/Linux:
-
 lsof -ti:3000 | xargs kill -9
 
 # Windows:
-
 netstat -ano | findstr :3000
 taskkill /PID <PID> /F
-
 ```
 
 ---

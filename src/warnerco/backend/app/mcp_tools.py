@@ -4547,6 +4547,161 @@ Tailor your response for a {audience} audience."""
 
 
 # =============================================================================
+# PROGRESSIVE TOOL LOADING (Anthropic context-engineering pattern)
+# =============================================================================
+# Anthropic recommends loading tool definitions on demand instead of pinning
+# every full schema in the model's context. With 21 WARNERCO tools, the full
+# schema dump is ~15-20K tokens; a name+summary listing is ~1K. Students can
+# call warn_search_tools first to discover candidates, then warn_describe_tool
+# to fetch the full schema for the one they actually need.
+#
+# These tools introspect the live mcp instance, so they never drift from the
+# real registry. No static manifest to maintain.
+
+
+class ToolSummary(BaseModel):
+    """Lightweight tool descriptor used by warn_search_tools."""
+
+    name: str = Field(description="Tool name (call this via MCP tools/call)")
+    summary: str = Field(description="First line of the tool's docstring")
+
+
+class ToolSearchResult(BaseModel):
+    """Result of a progressive tool-loading search."""
+
+    query: str = Field(description="The search query (empty string = list all)")
+    detail: Literal["name", "summary", "full"] = Field(
+        description="Detail level returned"
+    )
+    count: int = Field(description="Number of tools matched")
+    total: int = Field(description="Total tools registered on the server")
+    tools: List[Dict[str, Any]] = Field(
+        description="Matched tools at the requested detail level"
+    )
+
+
+def _first_line(text: Optional[str]) -> str:
+    """Return the first non-empty line of a docstring."""
+    if not text:
+        return ""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return ""
+
+
+@mcp.tool()
+async def warn_search_tools(
+    query: str = "",
+    detail: Literal["name", "summary", "full"] = "summary",
+    limit: int = 20,
+) -> ToolSearchResult:
+    """Discover MCP tools by keyword without loading every full schema.
+
+    This implements the progressive tool-loading pattern from Anthropic's
+    "Code execution with MCP" guidance. Instead of every client pre-loading
+    all 21 tool schemas (~15-20K tokens), call this first to find the tools
+    you need, then call warn_describe_tool for the full schema of just the
+    one you want to use.
+
+    Args:
+        query: Substring matched (case-insensitive) against tool name and
+            description. Empty string returns all tools.
+        detail: How much to return per tool.
+            - "name": just the name (cheapest, ~10 tokens/tool).
+            - "summary": name + first docstring line (default, ~30 tokens/tool).
+            - "full": name + full description + JSON input schema (~600 tokens/tool).
+        limit: Max number of tools to return. Default 20, max 100.
+
+    Returns:
+        ToolSearchResult with the matched tools at the requested detail level.
+
+    Example:
+        >>> # Cheap discovery
+        >>> await warn_search_tools(query="graph", detail="name")
+        >>> # Get just enough to choose
+        >>> await warn_search_tools(query="scratchpad", detail="summary")
+    """
+    tools = await mcp.get_tools()
+    q = query.lower().strip()
+    capped_limit = max(1, min(limit, 100))
+
+    matches = []
+    for name, tool in tools.items():
+        # Skip self to avoid recursive confusion in demos
+        if name in ("warn_search_tools", "warn_describe_tool"):
+            continue
+        haystack = f"{name}\n{tool.description or ''}".lower()
+        if not q or q in haystack:
+            matches.append((name, tool))
+
+    matches.sort(key=lambda pair: pair[0])
+    truncated = matches[:capped_limit]
+
+    rows: List[Dict[str, Any]] = []
+    for name, tool in truncated:
+        if detail == "name":
+            rows.append({"name": name})
+        elif detail == "summary":
+            rows.append({"name": name, "summary": _first_line(tool.description)})
+        else:  # "full"
+            mcp_tool = tool.to_mcp_tool()
+            dumped = mcp_tool.model_dump()
+            rows.append(
+                {
+                    "name": name,
+                    "description": dumped.get("description", ""),
+                    "inputSchema": dumped.get("inputSchema", {}),
+                }
+            )
+
+    return ToolSearchResult(
+        query=query,
+        detail=detail,
+        count=len(truncated),
+        total=len(tools),
+        tools=rows,
+    )
+
+
+@mcp.tool()
+async def warn_describe_tool(name: str) -> Dict[str, Any]:
+    """Return the full schema for one tool by name.
+
+    Use this after warn_search_tools to fetch the complete description and
+    JSON input schema for exactly the tool you intend to call. This is the
+    second half of the progressive tool-loading pattern.
+
+    Args:
+        name: Exact tool name (e.g., "warn_semantic_search").
+
+    Returns:
+        Dict with name, description, inputSchema, and outputSchema.
+
+    Raises:
+        ValueError: If no tool with that name is registered.
+
+    Example:
+        >>> await warn_describe_tool("warn_graph_neighbors")
+    """
+    tools = await mcp.get_tools()
+    tool = tools.get(name)
+    if tool is None:
+        raise ValueError(
+            f"Unknown tool: {name!r}. Use warn_search_tools to list available tools."
+        )
+
+    dumped = tool.to_mcp_tool().model_dump()
+    return {
+        "name": name,
+        "description": dumped.get("description", ""),
+        "inputSchema": dumped.get("inputSchema", {}),
+        "outputSchema": dumped.get("outputSchema"),
+    }
+
+
+# =============================================================================
 # MODULE EXPORTS
 # =============================================================================
 # The mcp instance is the main export. It is used by:

@@ -10,7 +10,7 @@ Welcome to the training hub for mastering **Context Engineering with Model Conte
 
 ### Prerequisites
 
-- Python 3.11+ (3.12+ recommended for WARNERCO Schematica)
+- **Python 3.13** (pinned in `.python-version`) — `onnxruntime` (a chromadb dependency) does not yet ship 3.14 wheels
 - Node.js 20+ (for Lab 01 and MCP Inspector)
 - [uv](https://docs.astral.sh/uv/) package manager (recommended for Python)
 - Claude Desktop or Claude Code
@@ -33,7 +33,10 @@ cd src/warnerco/backend
 uv sync
 uv run uvicorn app.main:app --reload    # HTTP server at http://localhost:8000
 uv run warnerco-mcp                      # MCP stdio server for Claude Desktop
+uv run warnerco-restart                  # Force-kill port 8000 and restart uvicorn
 ```
+
+The `warnerco-restart` command (from `scripts/restart_server.py`) terminates anything bound to port 8000 (Windows: `netstat` + `taskkill /F /T`; POSIX: `lsof` + `SIGKILL`) before restarting. Flags: `--kill-only`, `--port N`.
 
 ---
 
@@ -77,6 +80,17 @@ The flagship teaching application demonstrates production MCP patterns with a 7-
 | Relationship Queries | No           | No            | No                 | Yes         | No             |
 | Session Memory       | No           | No            | No                 | No          | Yes            |
 | Best For             | Prototyping  | Local dev     | Production         | Connections | Working memory |
+
+The knowledge graph is indexed at `src/warnerco/backend/data/graph/knowledge.db` with **117 entities** and **221 relationships** across 6 predicates (`has_tag`, `compatible_with`, `belongs_to_model`, `has_status`, `has_category`, `contains`).
+
+### Progressive Tool Loading
+
+The server now registers **23 MCP tools**, including two discovery tools that implement progressive tool loading per Anthropic's "code execution with MCP" guidance:
+
+- `warn_search_tools(query, detail, limit)` — keyword discovery with detail levels `name`, `summary`, `full`
+- `warn_describe_tool(name)` — full schema for a single tool by name
+
+Measured token savings on this server vs. shipping all full schemas up front: **95% (summary)** and **98% (name-only)** — **9064 tokens** drops to **533** (summary) and **176** (name-only). Clients can list tools cheaply, then pull full schemas only for what they actually plan to call.
 
 ---
 

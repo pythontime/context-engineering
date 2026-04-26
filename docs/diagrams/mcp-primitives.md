@@ -6,7 +6,7 @@ flowchart TB
     subgraph Server["<b>MCP SERVER: warnerco-schematica v2.0</b>"]
         direction TB
 
-        subgraph Tools["<b>TOOLS</b> (15) - Executable Actions"]
+        subgraph Tools["<b>TOOLS</b> (23) - Executable Actions"]
             direction LR
 
             subgraph DataTools["Data Retrieval"]
@@ -37,6 +37,18 @@ flowchart TB
                 T13["<b>warn_scratchpad_read</b><br/>subject?, predicate?, enrich?"]
                 T14["<b>warn_scratchpad_clear</b><br/>subject?, older_than_minutes?"]
                 T15["<b>warn_scratchpad_stats</b><br/>no params"]
+            end
+
+            subgraph GraphTools["Graph Memory"]
+                T16["<b>warn_add_relationship</b><br/>subject, predicate, object"]
+                T17["<b>warn_graph_neighbors</b><br/>entity_id, direction?"]
+                T18["<b>warn_graph_path</b><br/>source_id, target_id"]
+                T19["<b>warn_graph_stats</b><br/>no params"]
+            end
+
+            subgraph MetaTools["Progressive Loading (Meta)"]
+                T20["<b>warn_search_tools</b><br/>query, detail?"]
+                T21["<b>warn_describe_tool</b><br/>name"]
             end
         end
 
@@ -77,11 +89,20 @@ flowchart TB
 
     end
 
-    subgraph Client["<b>MCP CLIENT</b>"]
-        direction LR
-        C1["Claude Desktop"]
-        C2["VS Code Copilot"]
-        C3["Claude Code"]
+    subgraph Client["<b>MCP CLIENT</b> - exposes 3 capabilities back to server"]
+        direction TB
+        subgraph ClientApps["Host Applications"]
+            direction LR
+            C1["Claude Desktop"]
+            C2["VS Code Copilot"]
+            C3["Claude Code"]
+        end
+        subgraph ClientCaps["<b>CLIENT CAPABILITIES</b> (per spec 2025-11-25)"]
+            direction LR
+            CC1["<b>Sampling</b><br/>server requests LLM completions via client"]
+            CC2["<b>Roots</b><br/>server discovers filesystem boundaries"]
+            CC3["<b>Elicitation</b><br/>server requests structured user input"]
+        end
     end
 
     subgraph Protocol["<b>MCP PROTOCOL</b>"]
@@ -116,10 +137,10 @@ flowchart TB
     classDef clientBox fill:#dc2626,stroke:#b91c1c,color:#fff,stroke-width:2px
     classDef protoBox fill:#475569,stroke:#334155,color:#fff,stroke-width:2px
 
-    class T1,T2,T3,T4,T5,T6,T7,T8,T9,T10,T11,T12,T13,T14,T15 toolBox
+    class T1,T2,T3,T4,T5,T6,T7,T8,T9,T10,T11,T12,T13,T14,T15,T16,T17,T18,T19,T20,T21 toolBox
     class R1,R2,R3,R4,R5,R6,R7,R8,R9,R10 resBox
     class P1,P2,P3,P4,P5 promptBox
-    class C1,C2,C3 clientBox
+    class C1,C2,C3,CC1,CC2,CC3 clientBox
     class STDIO,HTTP protoBox
 ```
 
@@ -189,6 +210,22 @@ flowchart TB
 | `search_strategy_prompt` | query, filters? | Optimize search approach |
 | `maintenance_report_prompt` | robot_model | Generate maintenance checklist |
 | `schematic_review_prompt` | schematic_id | Technical review framework |
+
+## Client Capabilities (MCP Spec 2025-11-25)
+
+In addition to server-exposed primitives (Tools, Resources, Prompts), the MCP specification defines three **client capabilities** that the host application advertises back to the server. These flip the direction of the request: the server can ask the client to do work on its behalf.
+
+| Capability | Direction | Purpose |
+|------------|-----------|---------|
+| **Sampling** | Server -> Client -> LLM | Server requests an LLM completion through the client (the client owns the model and quota). Useful for agentic loops where the server needs reasoning without shipping its own LLM credentials. |
+| **Roots** | Server queries Client | Server discovers the filesystem boundaries (workspace roots) the user has authorized. Lets servers stay sandboxed to the user's project rather than the entire disk. |
+| **Elicitation** | Server -> Client -> User | Server requests structured user input mid-call via a JSON Schema. The client renders a form, returns a typed response. Most commonly missed primitive in MCP implementations. |
+
+**Elicitation** is how a tool like `warn_guided_search` can pause execution to ask the user "which category?" without hard-coding the parameter into the tool signature. The server sends a JSON Schema describing the expected response (`accept` / `decline` / `cancel`); the client renders the form, validates input, and returns the result. This enables multi-turn, schema-driven UX inside a single tool invocation.
+
+Reference: <https://modelcontextprotocol.io/specification/draft/client/elicitation>
+
+All three capabilities are part of the **2025-11-25 spec revision**. Servers must check the client's advertised capabilities during the `initialize` handshake before invoking any of them.
 
 ## Elicitation Pattern
 

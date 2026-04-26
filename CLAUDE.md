@@ -37,12 +37,20 @@ context-engineering/
 
 ### WARNERCO Schematica (FastAPI + FastMCP + LangGraph)
 
+**Python 3.13 required** — `.python-version` is pinned to 3.13. `onnxruntime` (chromadb dependency) does not ship 3.14 wheels, so `uv sync` fails on 3.14.
+
 ```bash
 cd src/warnerco/backend
 uv sync                                    # Install dependencies
 uv run uvicorn app.main:app --reload       # Start server (http://localhost:8000)
+uv run warnerco-serve                      # Same as above, via console script
 uv run warnerco-mcp                        # MCP stdio server (for Claude Desktop)
+uv run warnerco-restart                    # Force-kill anything on port 8000, then restart
+uv run warnerco-restart --kill-only        # Just free the port (no restart)
+uv run warnerco-restart --port 9000        # Use a different port
 ```
+
+**Restart helper:** `scripts/restart_server.py` — Windows uses `netstat -ano` + `taskkill /F /T /PID` (also kills uvicorn reload children); POSIX uses `lsof -t` + SIGKILL. Refuses to kill its own PID. Exit 0 if port freed, exit 1 if not.
 
 **Memory Backends** (set `MEMORY_BACKEND` in `.env`):
 - `json` - Fastest startup, keyword search (default)
@@ -197,10 +205,24 @@ AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-ada-002
 +---------------------------------------------------------------+
 ```
 
-**MCP Tools**:
-- Vector/Schema: `warn_list_robots`, `warn_get_robot`, `warn_semantic_search`, `warn_memory_stats`
+**MCP Tools** (23 total registered):
+- Vector/Schema: `warn_list_robots`, `warn_get_robot`, `warn_semantic_search`, `warn_memory_stats`, `warn_index_schematic`, `warn_compare_schematics`, `warn_create_schematic`, `warn_update_schematic`, `warn_delete_schematic`, `warn_explain_schematic`
+- Interactive (Elicitation/Sampling): `warn_guided_search`, `warn_feedback_loop`, `warn_replacement_advisor`
 - Graph: `warn_add_relationship`, `warn_graph_neighbors`, `warn_graph_path`, `warn_graph_stats`
 - Scratchpad: `warn_scratchpad_write`, `warn_scratchpad_read`, `warn_scratchpad_clear`, `warn_scratchpad_stats`
+- Progressive tool loading (meta): `warn_search_tools`, `warn_describe_tool`
+
+### Progressive Tool Loading
+
+Per Anthropic's "code execution with MCP" guidance — clients can discover tools cheaply instead of pre-loading every full schema. Measured on this server: full schemas for 23 tools = ~9064 tokens; summary index = ~533 tokens (95% saving); name-only = ~176 tokens (98% saving). See `docs/tutorials/progressive-tool-loading.md`.
+
+```python
+warn_search_tools(query="", detail="name")            # cheapest discovery
+warn_search_tools(query="graph", detail="summary")    # narrow it down
+warn_describe_tool(name="warn_graph_neighbors")       # full schema for one
+```
+
+The two meta tools self-exclude from `warn_search_tools` results (so `count` is up to 21 even when `total` is 23).
 
 **API Endpoints**:
 | Method | Path | Description |
@@ -229,7 +251,7 @@ WARNERCO Schematica includes a Graph Memory layer demonstrating hybrid RAG archi
 | `app/models/graph.py` | Entity and Relationship Pydantic models |
 | `app/adapters/graph_store.py` | SQLite persistence + NetworkX traversal |
 | `scripts/index_graph.py` | Populate graph from schematics.json |
-| `data/graph.db` | SQLite database (created by indexing) |
+| `data/graph/knowledge.db` | SQLite database (117 entities, 221 relationships) |
 
 **MCP Graph Tools**:
 
@@ -240,7 +262,7 @@ WARNERCO Schematica includes a Graph Memory layer demonstrating hybrid RAG archi
 | `warn_graph_path` | Find shortest path between entities |
 | `warn_graph_stats` | Node count, edge count, density |
 
-**Supported Predicates**: `depends_on`, `contains`, `has_status`, `manufactured_by`, `compatible_with`, `related_to`
+**Indexed Predicates** (from `scripts/index_graph.py`): `has_tag` (75), `compatible_with` (50), `belongs_to_model` (25), `has_category` (25), `has_status` (25), `contains` (21). The `warn_add_relationship` tool also accepts the legacy vocabulary (`depends_on`, `manufactured_by`, `related_to`).
 
 **Index the Graph**:
 

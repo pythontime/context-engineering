@@ -19,14 +19,15 @@ flowchart TB
     subgraph Graph["🕸️ TIER 2: Graph Store"]
         direction TB
         GAPI["GraphStore API\nadd_entity | add_relationship\nget_neighbors | shortest_path"]
-        subgraph Predicates["Relationship Types"]
-            P1["depends_on"]
-            P2["contains"]
-            P3["has_category"]
-            P4["compatible_with"]
-            P5["belongs_to_model"]
+        subgraph Predicates["Relationship Types (6)"]
+            P1["has_tag"]
+            P2["compatible_with"]
+            P3["belongs_to_model"]
+            P4["has_status"]
+            P5["has_category"]
+            P6["contains"]
         end
-        GDB[("SQLite + NetworkX\n117 entities\n221 relationships")]
+        GDB[("SQLite + NetworkX\n117 entities\n221 relationships\n6 predicates")]
     end
 
     subgraph Scratch["📝 TIER 3: Scratchpad"]
@@ -72,6 +73,6 @@ flowchart TB
 
     class Q1,Q2,Q3 queryNode
     class JSON,CHROMA,AZURE,VAPI vectorNode
-    class GAPI,P1,P2,P3,P4,P5,GDB graphNode
+    class GAPI,P1,P2,P3,P4,P5,P6,GDB graphNode
     class SAPI,C1,C2,C3,C4,SCONF scratchNode
     class SJSON,SGRPH,SCHRM dataNode

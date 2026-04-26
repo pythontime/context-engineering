@@ -21,13 +21,15 @@ flowchart TB
     end
 
     subgraph MCP["<b>MCP PRIMITIVES</b>"]
-        subgraph Tools["<b>15 Tools</b>"]
+        subgraph Tools["<b>23 Tools</b>"]
             direction TB
             T_DATA["<b>Data Tools</b><br/>list_robots | get_robot<br/>semantic_search | memory_stats"]
             T_MOD["<b>Modification Tools</b><br/>index_schematic | compare_schematics"]
             T_CRUD["<b>CRUD Tools</b><br/>create | update | delete"]
             T_INT["<b>Interactive Tools</b><br/>guided_search | feedback_loop"]
             T_GRAPH["<b>Graph Tools</b><br/>add_relationship | graph_neighbors<br/>graph_path | graph_stats"]
+            T_SCRATCH["<b>Scratchpad Tools</b><br/>scratchpad_write | scratchpad_read<br/>scratchpad_clear | scratchpad_stats"]
+            T_META["<b>Progressive Loading</b><br/>warn_search_tools | warn_describe_tool"]
         end
 
         subgraph Resources["<b>10 Resources</b>"]
@@ -103,7 +105,7 @@ flowchart TB
 
     class CD,VSC,DASH,API clientBox
     class ROUTES,MCP_EP,STATIC serverBox
-    class T_DATA,T_MOD,T_CRUD,T_INT,T_GRAPH,R_MEM,R_CAT,R_HELP,R_META,P_ALL mcpBox
+    class T_DATA,T_MOD,T_CRUD,T_INT,T_GRAPH,T_SCRATCH,T_META,R_MEM,R_CAT,R_HELP,R_META,P_ALL mcpBox
     class LG1,LG2,LG3,LG4,LG5,LG6,LG7 orchBox
     class JSON,CHROMA,AZURE memBox
     class GRAPH graphBox
@@ -128,7 +130,7 @@ flowchart TB
 
 | Primitive | Count | Purpose |
 |-----------|-------|---------|
-| **Tools** | 15 | Executable actions (CRUD, search, interactive, graph) |
+| **Tools** | 23 | Executable actions (CRUD, search, interactive, graph, scratchpad, progressive loading) |
 | **Resources** | 10 | Read-only data (memory, catalog, help, meta) |
 | **Prompts** | 5 | Reusable templates (diagnostic, comparison, etc.) |
 

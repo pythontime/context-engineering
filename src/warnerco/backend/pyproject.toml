@@ -38,6 +38,8 @@ dev = [
 warnerco-mcp = "app.mcp_stdio:main"
 # HTTP server
 warnerco-serve = "app.main:run_server"
+# Force-kill anything on the port, then restart the HTTP server
+warnerco-restart = "scripts.restart_server:main"
 
 # Poetry compatibility (reads from [project] above)
 [tool.poetry]
@@ -78,6 +80,7 @@ ruff = "^0.8.0"
 [tool.poetry.scripts]
 warnerco-mcp = "app.mcp_stdio:main"
 warnerco-serve = "app.main:run_server"
+warnerco-restart = "scripts.restart_server:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
