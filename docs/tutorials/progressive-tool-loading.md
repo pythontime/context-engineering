@@ -243,7 +243,7 @@ Now the model has exactly the contract it needs - and only for the tool it is ab
 ### Via MCP Inspector
 
 1. Start the stdio server with `npx @modelcontextprotocol/inspector uv run warnerco-mcp` from `src/warnerco/backend`.
-2. Open the Inspector UI (default http://localhost:5173 or http://localhost:6274).
+2. Open the Inspector UI at http://localhost:5173.
 3. In the **Tools** tab, find `warn_search_tools` and run the three example payloads above.
 4. Then run `warn_describe_tool` with `{"name": "warn_graph_neighbors"}`.
 

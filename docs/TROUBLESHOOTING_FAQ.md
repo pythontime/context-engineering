@@ -439,7 +439,7 @@ uv run warnerco-mcp
 cd src/warnerco/backend
 npx @modelcontextprotocol/inspector uv run warnerco-mcp
 
-# Opens browser at http://localhost:5173 (or http://localhost:6274)
+# Opens browser at http://localhost:5173
 ```
 
 ### Q: Claude Desktop shows "Server disconnected"

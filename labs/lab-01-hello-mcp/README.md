@@ -206,7 +206,7 @@ npx @modelcontextprotocol/inspector
 
 This will:
 1. Start a local web server
-2. Open your browser to `http://localhost:6274`
+2. Open your browser to `http://localhost:5173`
 
 In the MCP Inspector web interface:
 

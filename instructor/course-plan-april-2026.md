@@ -10,7 +10,7 @@ This document provides the complete 4-segment breakdown for the **Context Engine
 |---------|----------|-------|-----------------|
 | 1 | 50 min | All About Context | Understanding context windows, token economics, and why AI forgets |
 | 2 | 50 min | All About MCP | MCP protocol deep-dive with FastMCP and FastAPI |
-| 3 | 50 min | Semantic Memory Stores | Building memory with ChromaDB, Pinecone, SQLite, and JSON |
+| 3 | 50 min | CoALA Four-Tier Memory | All four tiers (Working / Episodic / Semantic / Procedural) live in WARNERCO with the consolidation "sleep cycle" |
 | 4 | 50 min | MCP in Production Clients | Claude Code, GitHub Copilot, VS Code, and LangGraph integration |
 
 **Total Duration:** 4 hours (including breaks)
@@ -122,6 +122,8 @@ User Query → Context Assembly Pipeline:
             → Optimized Context → LLM → Response + Memory Update
 ```
 
+**This four-tier mental model is from CoALA — Cognitive Architectures for Language Agents (Sumers et al. 2024).** Hold this in your head; in Segment 3 we're going to see all four tiers exercised in one running app.
+
 #### 4. The Context Engineering Solution (10 minutes)
 
 **Definition:**
@@ -147,7 +149,7 @@ Model Context Protocol provides:
 ```
 Segment 1 (Now)     → Understanding the Problem
 Segment 2 (Next)    → MCP Protocol & Tools
-Segment 3           → Memory Store Implementations
+Segment 3           → CoALA Four-Tier Memory in WARNERCO
 Segment 4           → Production Client Integration
 ```
 
@@ -423,16 +425,16 @@ if __name__ == "__main__":
 **Launch Inspector:**
 
 ```bash
-# Install inspector
-pip install mcp-inspector
+# No install — runs on demand via npx (Node 20+ required)
+npx @modelcontextprotocol/inspector python server.py
 
-# Run your server with inspector
-mcp-inspector python server.py
+# For the WARNERCO live demo:
+npx @modelcontextprotocol/inspector uv run warnerco-mcp
 ```
 
 **Inspector Workflow:**
 
-1. Open http://localhost:6274
+1. Open http://localhost:5173
 2. View discovered tools and resources
 3. Test tool invocations interactively
 4. Inspect JSON-RPC messages
@@ -579,20 +581,21 @@ async def get_memory_by_id(memory_id: str) -> str:
 
 ---
 
-## Segment 3: Semantic Memory Stores - Persistent AI Memory
+## Segment 3: CoALA Four-Tier Memory — Persistent AI Memory in WARNERCO
 
 **Duration:** 50 minutes
-**Format:** Hands-on implementation with multiple backends
+**Format:** Hands-on tour of the WARNERCO app with multiple memory tiers
 
 ### Learning Objectives
 
 By the end of this segment, participants will be able to:
 
-- Implement memory persistence with JSON, SQLite, ChromaDB, and Pinecone
-- Understand when to use each storage backend
-- Build semantic search with vector embeddings
-- Design hybrid memory architectures
-- Handle memory lifecycle and cleanup
+- Name and distinguish the four CoALA memory tiers (Working / Episodic / Semantic / Procedural)
+- Choose the right storage backend per tier (JSON / SQLite / Chroma / Azure AI Search)
+- Recognize when episodic recall should fire (gated by query intent)
+- Trace the Park et al. recency × importance × relevance scoring formula in `warn_episodic_recall` output
+- Trigger a consolidation cycle (the "sleep cycle") and observe the side effects across tiers
+- Identify which MCP primitive carries each tier's reads and writes (Tools, Resources, Prompts, Sampling)
 
 ### Topics Covered (40 minutes)
 
@@ -834,270 +837,64 @@ class SQLiteMemoryStore:
             return cursor.rowcount > 0
 ```
 
-#### 4. ChromaDB Semantic Memory (15 minutes)
+#### 4. CoALA Four-Tier Memory in WARNERCO (20 minutes) — **THE LIVE DEMO**
 
-**Vector Search for Semantic Understanding:**
+This block replaces the standalone ChromaDB + Pinecone walkthroughs from earlier drafts of the plan. The flagship app already implements all four CoALA tiers — we'll show them in one continuous turn-by-turn scenario. Full classroom script: [`docs/tutorials/coala-memory-walkthrough.md`](../docs/tutorials/coala-memory-walkthrough.md).
 
-```python
-# memory_stores/chroma_store.py
-import chromadb
-from chromadb.config import Settings
-from datetime import datetime
-from typing import Optional, List, Dict, Any
-import json
+**The four tiers, mapped to the WARNERCO app:**
 
-class ChromaMemoryStore:
-    """ChromaDB-based semantic memory store with embeddings."""
+| CoALA Tier | What it stores | Backed by | LangGraph node | Read tools |
+|---|---|---|---|---|
+| Working | This-session observations & inferences | `data/scratchpad/notes.db` (SQLite) | `inject_scratchpad` | `warn_scratchpad_read` |
+| Episodic | Timestamped events with importance | `data/episodic/events.db` (SQLite) | `recall_episodes` (gated) + `log_episode` | `warn_episodic_recall` |
+| Semantic | Durable facts (incl. consolidated `FACT-*`) | Vector store (Chroma / Azure / JSON) | `retrieve` | `warn_semantic_search` |
+| Procedural | Versioned skills/workflows | `@mcp.prompt()` registrations | (user-invoked) | `memory://procedural-catalog` |
 
-    def __init__(self, persist_directory: str = "./chroma_data",
-                 collection_name: str = "memories"):
-        # Initialize ChromaDB with persistence
-        self.client = chromadb.PersistentClient(
-            path=persist_directory,
-            settings=Settings(anonymized_telemetry=False)
-        )
+Pre-flight (do once before class — see `instructor/PRE-CLASS-CHECKLIST.md`):
 
-        # Get or create collection with embedding function
-        self.collection = self.client.get_or_create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": "cosine"}  # Use cosine similarity
-        )
-
-    def store(self, content: str, category: str = "general",
-              tags: List[str] = None, importance: int = 5,
-              metadata: Dict[str, Any] = None) -> str:
-        """Store a memory with automatic embedding generation."""
-        memory_id = f"mem_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
-
-        # Prepare metadata (ChromaDB metadata must be flat)
-        doc_metadata = {
-            "category": category,
-            "tags": json.dumps(tags or []),
-            "importance": importance,
-            "created_at": datetime.utcnow().isoformat(),
-            **(metadata or {})
-        }
-
-        # Add to collection (ChromaDB auto-generates embeddings)
-        self.collection.add(
-            documents=[content],
-            metadatas=[doc_metadata],
-            ids=[memory_id]
-        )
-
-        return memory_id
-
-    def semantic_search(self, query: str, limit: int = 10,
-                       category: Optional[str] = None,
-                       min_importance: int = 0) -> List[Dict]:
-        """Semantic search using vector similarity."""
-        # Build where filter
-        where = {}
-        if category:
-            where["category"] = category
-        if min_importance > 0:
-            where["importance"] = {"$gte": min_importance}
-
-        # Query with semantic similarity
-        results = self.collection.query(
-            query_texts=[query],
-            n_results=limit,
-            where=where if where else None,
-            include=["documents", "metadatas", "distances"]
-        )
-
-        # Format results
-        memories = []
-        for i, doc in enumerate(results["documents"][0]):
-            memories.append({
-                "id": results["ids"][0][i],
-                "content": doc,
-                "metadata": results["metadatas"][0][i],
-                "similarity": 1 - results["distances"][0][i]  # Convert distance to similarity
-            })
-
-        return memories
-
-    def get(self, memory_id: str) -> Optional[Dict]:
-        """Get a specific memory by ID."""
-        result = self.collection.get(
-            ids=[memory_id],
-            include=["documents", "metadatas"]
-        )
-
-        if result["ids"]:
-            return {
-                "id": result["ids"][0],
-                "content": result["documents"][0],
-                "metadata": result["metadatas"][0]
-            }
-        return None
-
-    def update(self, memory_id: str, content: Optional[str] = None,
-               metadata: Optional[Dict] = None) -> bool:
-        """Update a memory's content or metadata."""
-        try:
-            update_kwargs = {"ids": [memory_id]}
-            if content:
-                update_kwargs["documents"] = [content]
-            if metadata:
-                update_kwargs["metadatas"] = [metadata]
-
-            self.collection.update(**update_kwargs)
-            return True
-        except Exception:
-            return False
-
-    def delete(self, memory_id: str) -> bool:
-        """Delete a memory by ID."""
-        try:
-            self.collection.delete(ids=[memory_id])
-            return True
-        except Exception:
-            return False
-
-    def get_stats(self) -> Dict:
-        """Get collection statistics."""
-        return {
-            "total_memories": self.collection.count(),
-            "name": self.collection.name
-        }
+```bash
+cd src/warnerco/backend
+uv sync
+uv run python -c "from app.adapters.chroma_store import ChromaMemoryStore; import asyncio; asyncio.run(ChromaMemoryStore().index_all())"
+uv run python scripts/index_graph.py
+rm -f data/episodic/events.db data/scratchpad/notes.db   # fresh slate for class
+uv run warnerco-restart
+# Second terminal:
+npx @modelcontextprotocol/inspector uv run warnerco-mcp
 ```
 
-#### 5. Pinecone Cloud Memory (10 minutes)
+**Live demo path (4 minutes — hits all four tiers):**
 
-**Enterprise-Scale Vector Search:**
+| Step | Tool / Resource | What students see |
+|---|---|---|
+| 0 | Read `memory://coala-overview` | Empty snapshot: working=0, episodic=0, semantic=25, procedural=5 |
+| 1 | `warn_scratchpad_write` (working) | LLM minimization + enrichment, token-savings metrics |
+| 2 | `warn_semantic_search` with `session_id="class-demo"` | Diagnostic intent fires the 9-node pipeline; `recalled_episodes=[]` first time |
+| 3 | Same query, second time | `recalled_episodes=[...]` — episodic recall surfaces turn 1 |
+| 3b | `warn_episodic_recall` | **Park et al. score breakdown** visible: `{recency, importance, relevance, total}` per event |
+| 4 | `warn_semantic_search("get WRN-00006")` | Lookup intent SKIPS episodic recall (gating works) |
+| 5 | `warn_consolidate_memory` | Sleep cycle: `ctx.sample()` extracts durable facts → `FACT-*` records appear in vector store |
+| 6 | `warn_semantic_search("consolidated")` | The new FACT records show up |
+| 7 | Read `memory://procedural-catalog` | 5 versioned prompts as procedural memory |
+| 8 | Read `memory://coala-overview` again | All four tiers now have non-zero counts — close the loop |
 
-```python
-# memory_stores/pinecone_store.py
-from pinecone import Pinecone, ServerlessSpec
-from datetime import datetime
-from typing import Optional, List, Dict, Any
-import os
-import json
+**Episodic recall scoring** (the slide-worthy moment of the segment):
 
-# For embeddings
-from anthropic import Anthropic
-
-class PineconeMemoryStore:
-    """Pinecone-based semantic memory for production scale."""
-
-    def __init__(self, index_name: str = "ai-memories"):
-        # Initialize Pinecone
-        self.pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
-
-        # Initialize Anthropic for embeddings (using Voyage AI through Anthropic)
-        self.anthropic = Anthropic()
-
-        # Create index if it doesn't exist
-        if index_name not in self.pc.list_indexes().names():
-            self.pc.create_index(
-                name=index_name,
-                dimension=1024,  # Voyage embeddings dimension
-                metric="cosine",
-                spec=ServerlessSpec(
-                    cloud="aws",
-                    region="us-east-1"
-                )
-            )
-
-        self.index = self.pc.Index(index_name)
-
-    def _get_embedding(self, text: str) -> List[float]:
-        """Generate embedding using Anthropic/Voyage."""
-        # Note: In production, use voyage-3 or similar
-        # This is a simplified example
-        response = self.anthropic.embeddings.create(
-            model="voyage-3",
-            input=[text]
-        )
-        return response.data[0].embedding
-
-    def store(self, content: str, category: str = "general",
-              tags: List[str] = None, importance: int = 5,
-              user_id: str = "default",
-              metadata: Dict[str, Any] = None) -> str:
-        """Store a memory with embedding in Pinecone."""
-        memory_id = f"mem_{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
-
-        # Generate embedding
-        embedding = self._get_embedding(content)
-
-        # Prepare metadata
-        doc_metadata = {
-            "content": content[:1000],  # Pinecone metadata limit
-            "category": category,
-            "tags": json.dumps(tags or []),
-            "importance": importance,
-            "user_id": user_id,
-            "created_at": datetime.utcnow().isoformat(),
-            **(metadata or {})
-        }
-
-        # Upsert to Pinecone
-        self.index.upsert(
-            vectors=[{
-                "id": memory_id,
-                "values": embedding,
-                "metadata": doc_metadata
-            }],
-            namespace=user_id  # Namespace for multi-tenant isolation
-        )
-
-        return memory_id
-
-    def semantic_search(self, query: str, limit: int = 10,
-                       user_id: str = "default",
-                       category: Optional[str] = None,
-                       min_importance: int = 0) -> List[Dict]:
-        """Semantic search using Pinecone."""
-        # Generate query embedding
-        query_embedding = self._get_embedding(query)
-
-        # Build filter
-        filter_dict = {}
-        if category:
-            filter_dict["category"] = {"$eq": category}
-        if min_importance > 0:
-            filter_dict["importance"] = {"$gte": min_importance}
-
-        # Query Pinecone
-        results = self.index.query(
-            vector=query_embedding,
-            top_k=limit,
-            namespace=user_id,
-            filter=filter_dict if filter_dict else None,
-            include_metadata=True
-        )
-
-        # Format results
-        memories = []
-        for match in results.matches:
-            memories.append({
-                "id": match.id,
-                "content": match.metadata.get("content", ""),
-                "metadata": match.metadata,
-                "similarity": match.score
-            })
-
-        return memories
-
-    def delete(self, memory_id: str, user_id: str = "default") -> bool:
-        """Delete a memory from Pinecone."""
-        try:
-            self.index.delete(ids=[memory_id], namespace=user_id)
-            return True
-        except Exception:
-            return False
-
-    def get_stats(self, user_id: str = "default") -> Dict:
-        """Get index statistics."""
-        stats = self.index.describe_index_stats()
-        return {
-            "total_vectors": stats.total_vector_count,
-            "namespaces": stats.namespaces
-        }
 ```
+total = α_recency · 0.5^(hours_since / half_life)
+      + α_importance · stored_importance
+      + α_relevance · bag_of_words_cosine(query, summary+content)
+```
+
+Defaults: `α_recency=0.4, α_importance=0.3, α_relevance=0.3, half_life=24h`. Override via `EPISODIC_*` env vars (already pre-pinned in `.claude/mcp.json` and `.vscode/mcp.json` under the `warnerco-coala-memory` server entry).
+
+**Pedagogical simplifications to call out:**
+
+- Relevance uses bag-of-words cosine, not embeddings. Three lines of code, zero embedding spend per recall. Swap-in to embeddings is a 3-line edit at `_relevance()` in `app/adapters/episodic_store.py`. Production agents use the latter.
+- Consolidation is **ADD-only**. Mem0's full ADD/UPDATE/DELETE/NOOP is left as homework.
+- Consolidated facts ride the existing `Schematic` shape with `category="consolidated_fact"`, not a separate "fact" collection. Filterable by tag.
+
+**Pinecone, Weaviate, and other production vector stores** — covered as slide-only material with the line: *"Same idea as Azure AI Search above — swap the adapter, keep the LangGraph nodes. The scoring formula and the four CoALA tiers don't change."*
 
 #### 6. Unified Memory Interface (5 minutes)
 
@@ -1156,59 +953,50 @@ def create_memory_store(backend: MemoryBackend, **kwargs) -> MemoryStore:
         raise ValueError(f"Unknown backend: {backend}")
 ```
 
-### Exercise: Build a Hybrid Memory MCP Server (10 minutes)
+### Exercise: Trigger Consolidation in WARNERCO (10 minutes)
 
-**Task:** Create an MCP server that uses SQLite for structured data and ChromaDB for semantic search.
+**Task:** Drive the WARNERCO app through one full consolidation cycle and observe the side effects across all four CoALA tiers.
 
 **Requirements:**
 
-1. Store memories in both backends
-2. Use SQLite for exact queries (by ID, category)
-3. Use ChromaDB for semantic search
-4. Implement a unified search that combines both
+1. Start with a clean `data/episodic/events.db` and `data/scratchpad/notes.db`
+2. Write 2–3 working-memory notes via `warn_scratchpad_write`
+3. Run 2–3 diagnostic queries with the same `session_id` so episodic memory accumulates real events
+4. Call `warn_consolidate_memory(since_minutes=60, max_facts=3)`
+5. Verify:
+   - Vector store gained `FACT-*` records (search for `consolidated`)
+   - Episodic memory gained an `OBSERVATION` event ("Consolidation promoted N facts")
+   - `memory://coala-overview` reflects the new counts
 
-**Starter Code:**
+**Bonus:** Re-run a related diagnostic query and watch the consolidated facts surface in retrieval (Tier 3 now informs the answer to a question that was originally answered from Tier 1 + 2). This is the moment the "memory engineering" thesis becomes self-evident.
 
-```python
-# hybrid_server.py
-from fastmcp import FastMCP
-from memory_stores.sqlite_store import SQLiteMemoryStore
-from memory_stores.chroma_store import ChromaMemoryStore
+**What to type (paste-ready):**
 
-mcp = FastMCP("hybrid-memory")
+```bash
+# In MCP Inspector, call these tools in order:
+warn_scratchpad_write subject="WRN-00006" predicate="observed" object_="thermal_system" \
+  content="Operator reports thermal subsystem trips during heavy hydraulic load"
 
-sql_store = SQLiteMemoryStore()
-vector_store = ChromaMemoryStore()
+warn_semantic_search query="thermal subsystem failing on hydraulics" session_id="class-demo"
+warn_semantic_search query="thermal subsystem failing on hydraulics" session_id="class-demo"  # twice
 
-@mcp.tool()
-async def store_memory(content: str, category: str = "general", tags: list = []) -> str:
-    """Store memory in both SQL and vector stores."""
-    # Store in SQLite for structured queries
-    memory_id = sql_store.store(content, category=category, tags=tags)
+warn_consolidate_memory since_minutes=60 max_facts=3 session_id="class-demo"
 
-    # Store in ChromaDB for semantic search (use same ID)
-    vector_store.collection.add(
-        documents=[content],
-        metadatas=[{"category": category, "tags": str(tags)}],
-        ids=[memory_id]
-    )
-
-    return f"Stored memory with ID: {memory_id}"
-
-@mcp.tool()
-async def hybrid_search(query: str, limit: int = 10) -> str:
-    """Search using both exact match and semantic similarity."""
-    # YOUR CODE HERE
-    pass
+warn_semantic_search query="consolidated"   # see FACT-* records
+warn_episodic_recent limit=10               # see the OBSERVATION event
 ```
+
+The complete walkthrough with narration cues is in [`docs/tutorials/coala-memory-walkthrough.md`](../docs/tutorials/coala-memory-walkthrough.md).
 
 ### Key Takeaways
 
-- JSON for prototyping, SQLite for structure, ChromaDB/Pinecone for semantics
-- Vector search enables "meaning" not just "matching"
-- Hybrid approaches combine strengths of multiple backends
-- Abstract interfaces allow backend swapping without code changes
-- Consider data lifecycle, cleanup, and scaling from the start
+- JSON for prototyping, SQLite for structure, vector stores (Chroma / Azure / Pinecone) for semantics
+- The CoALA framework (Sumers et al. 2024) gives you the *vocabulary* — Working / Episodic / Semantic / Procedural — for talking about agent memory
+- WARNERCO implements all four tiers in one Python codebase under `src/warnerco/backend/app/`
+- The "sleep cycle" (`warn_consolidate_memory`) uses MCP Sampling to promote short-term observations into durable knowledge
+- Episodic recall is gated by query intent — LOOKUP and SEARCH skip it; DIAGNOSTIC and ANALYTICS use it
+- Pedagogical simplifications (bag-of-words relevance, ADD-only consolidation) are flagged in code with `# CoALA NOTE` comments — production hardening is the homework
+- Abstract interfaces (`MemoryStore`, `EpisodicStore`, `ScratchpadStore`) let you swap backends without touching the LangGraph nodes
 
 ---
 
@@ -1286,24 +1074,30 @@ By the end of this segment, participants will be able to:
 
 **Claude Code MCP Configuration:**
 
+Claude Code reads `.mcp.json` (project root) or `.claude/mcp.json` (project-scoped). Root key is `mcpServers` (note the camelCase — it's different from VS Code, which uses `servers`).
+
 ```json
 // .claude/mcp.json in your project root
 {
-  "servers": {
-    "project-memory": {
-      "command": "python",
-      "args": ["./mcp-servers/memory_server.py"],
+  "mcpServers": {
+    "warnerco-coala-memory": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "warnerco-mcp"],
+      "cwd": "C:/github/context-engineering/src/warnerco/backend",
       "env": {
-        "MEMORY_PATH": "./.claude/memories.json"
+        "MEMORY_BACKEND": "chroma",
+        "EPISODIC_DB_PATH": "data/episodic/events.db"
+      },
+      "permissions": {
+        "sampling": "allowed"
       }
-    },
-    "codebase": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/mcp-codebase", "."]
     }
   }
 }
 ```
+
+This is the **actual config** checked into this repo at `.claude/mcp.json` — the WARNERCO server exposes 28 tools including all four CoALA tiers.
 
 **Using Memory in Claude Code:**
 
@@ -1358,34 +1152,35 @@ async def get_project_context() -> str:
 
 #### 3. VS Code + GitHub Copilot (10 minutes)
 
-**MCP Extension for VS Code:**
+**VS Code MCP Configuration:**
+
+VS Code reads `.vscode/mcp.json` (NOT `settings.json`). Root key is `servers` (singular `mcp` namespace is older/deprecated). Per-server `"type"` is required — values: `stdio`, `http`, `sse`.
 
 ```json
-// .vscode/settings.json
+// .vscode/mcp.json
 {
-  "mcp.servers": {
-    "workspace-memory": {
-      "command": "python",
-      "args": ["${workspaceFolder}/tools/memory_server.py"]
+  "servers": {
+    "warnerco-coala-memory": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "warnerco-mcp"],
+      "cwd": "${workspaceFolder}/src/warnerco/backend",
+      "env": {
+        "MEMORY_BACKEND": "chroma",
+        "EPISODIC_DB_PATH": "data/episodic/events.db"
+      },
+      "dev": {
+        "watch": "src/warnerco/backend/app/**/*.py",
+        "debug": { "type": "python" }
+      }
     }
-  },
-  "github.copilot.chat.experimental.mcpServers": true
+  }
 }
 ```
 
-**Copilot Chat with MCP Context:**
+This is the **actual config** in this repo at `.vscode/mcp.json`. The `dev.watch` block is VS-Code-only — it hot-reloads the server when you edit `.py` files during a live demo.
 
-```typescript
-// Using MCP tools in Copilot Chat
-// @workspace What decisions have we made about the API design?
-// Copilot will use MCP memory tools to retrieve context
-
-// Example MCP-aware prompt
-/*
- * @mcp memory search "API design decisions"
- * Based on the stored context, generate code that follows our patterns
- */
-```
+To list/start servers: `Cmd/Ctrl+Shift+P → MCP: List Servers`. In Copilot Chat: `@warnerco-coala-memory <prompt>` to scope a query to that server.
 
 #### 4. LangGraph Multi-Agent Integration (10 minutes)
 
@@ -1706,35 +1501,48 @@ During this 4-hour course, you:
 
 ✅ Understood context windows, token economics, and the four types of context loss
 ✅ Built MCP servers using FastMCP with Python
-✅ Implemented memory stores with JSON, SQLite, ChromaDB, and Pinecone
-✅ Integrated MCP with Claude Desktop, Claude Code, and VS Code
-✅ Created multi-agent workflows with LangGraph and shared memory
-✅ Learned production deployment patterns
+✅ Toured all four CoALA memory tiers (Working / Episodic / Semantic / Procedural) live in the WARNERCO app
+✅ Triggered the consolidation "sleep cycle" via MCP Sampling and saw short-term observations promote into durable knowledge
+✅ Integrated MCP with Claude Desktop, Claude Code, and VS Code Copilot using the actual `.claude/mcp.json` and `.vscode/mcp.json` configs in this repo
+✅ Walked the 9-node LangGraph pipeline that exercises every tier in one turn
+✅ Learned production deployment patterns (Azure Container Apps + APIM)
 
 ### Repository Contents
 
 ```
 context-engineering/
-├── mcp-servers/
-│   ├── memory_server/           # Basic FastMCP memory server
-│   ├── memory_stores/           # Storage backend implementations
-│   │   ├── json_store.py
-│   │   ├── sqlite_store.py
-│   │   ├── chroma_store.py
-│   │   └── pinecone_store.py
-│   └── langgraph_integration/   # Multi-agent examples
-├── examples/
-│   ├── claude_desktop_config.json
-│   ├── claude_code_config.json
-│   └── vscode_settings.json
-├── labs/
-│   ├── lab-01-context-basics/
-│   ├── lab-02-fastmcp-server/
-│   ├── lab-03-semantic-memory/
-│   └── lab-04-client-integration/
-└── docs/
-    └── API_REFERENCE.md
+├── src/warnerco/backend/             # WARNERCO Schematica — flagship teaching app
+│   ├── app/
+│   │   ├── adapters/                 # Memory backends (JSON, Chroma, Azure, Graph, Scratchpad, Episodic, CoALA overview)
+│   │   ├── langgraph/                # 9-node CoALA-tiered RAG pipeline + consolidation cycle
+│   │   ├── models/                   # Pydantic models (schematic, graph, scratchpad, episodic)
+│   │   ├── main.py                   # FastAPI + FastMCP combined server
+│   │   └── mcp_tools.py              # 28 tools, 11 resources, 5 prompts
+│   ├── data/
+│   │   ├── schematics/schematics.json  # 25 robot schematics (source of truth)
+│   │   └── graph/knowledge.db          # 117 entities, 221 relationships
+│   └── scripts/                      # Index helpers + warnerco-restart
+├── labs/lab-01-hello-mcp/            # Beginner Node.js MCP lab (starter + solution)
+├── docs/
+│   ├── tutorials/
+│   │   ├── coala-memory-walkthrough.md   # ★ Tim's class-anchor demo script
+│   │   ├── graph-memory-tutorial.md
+│   │   ├── progressive-tool-loading.md
+│   │   └── demo-sampling-vscode.md
+│   ├── diagrams/                     # Mermaid + rendered SVG/PNG architecture diagrams
+│   ├── INSTRUCTOR_DEMO_WALKTHROUGH.md
+│   ├── STUDENT_SETUP_GUIDE.md
+│   └── TROUBLESHOOTING_FAQ.md
+├── instructor/                       # Instructor-only materials (this plan, deck, checklist)
+├── research_synthesis/               # 4 deep-research reports on agent memory
+├── config/claude_desktop_config.json # Sample Claude Desktop MCP config
+├── .vscode/mcp.json                  # VS Code Copilot MCP config (checked in)
+├── .claude/mcp.json                  # Claude Code project-scoped MCP config (checked in)
+├── CLAUDE.md                         # Source of truth for development
+└── README.md
 ```
+
+There is no `mcp-servers/` directory and no `lab-02..04` — earlier plan drafts referenced those; they were folded into `src/warnerco/backend/` (which IS the production-quality MCP server) and a single hands-on lab respectively. The four-segment course covers more memory ground than four labs ever could.
 
 ### Taking It Further
 

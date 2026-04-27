@@ -452,7 +452,7 @@ During the 4-hour course (4 x 50-minute segments), we will:
 
 2. **Segment 2** (50 min): All About MCP - FastMCP, FastAPI, tools, resources, prompts, elicitations
 
-3. **Segment 3** (50 min): Semantic Memory Stores - JSON, ChromaDB, Azure AI Search, Graph Memory, Scratchpad
+3. **Segment 3** (50 min): CoALA Four-Tier Memory in WARNERCO — Working / Episodic / Semantic / Procedural live, plus the consolidation "sleep cycle"
 
 4. **Segment 4** (50 min): MCP in Production - Claude Desktop, Claude Code, VS Code, GitHub Copilot, LangGraph
 
