@@ -3,6 +3,7 @@ flowchart LR
     subgraph Input["📥 Input"]
         Q["Query"]
         F["Filters"]
+        SID["session_id (opt)"]
     end
 
     subgraph Node1["1️⃣ PARSE INTENT"]
@@ -18,37 +19,48 @@ flowchart LR
         G3["Build graph_context"]
     end
 
-    subgraph Node3["3️⃣ INJECT SCRATCHPAD"]
+    subgraph Node3["3️⃣ INJECT SCRATCHPAD<br/><i>CoALA: working</i>"]
         S1["Get recent entries"]
         S2["Apply token budget"]
         S3["Format context"]
     end
 
-    subgraph Node4["4️⃣ RETRIEVE"]
+    subgraph Node4["4️⃣ RECALL EPISODES<br/><i>CoALA: episodic</i>"]
+        E1["Gate: DIAGNOSTIC/ANALYTICS only"]
+        E2["Park et al. score:<br/>α_r·rec + α_i·imp + α_l·rel"]
+        E3["Top-k by total"]
+    end
+
+    subgraph Node5["5️⃣ RETRIEVE<br/><i>CoALA: semantic</i>"]
         R1["Vector search"]
         R2["Score & rank"]
         R3["Return candidates"]
     end
 
-    subgraph Node5["5️⃣ COMPRESS"]
+    subgraph Node6["6️⃣ COMPRESS"]
         C1["Merge all contexts"]
         C2["Format by intent"]
         C3["Trim to budget"]
     end
 
-    subgraph Node6["6️⃣ REASON"]
+    subgraph Node7["7️⃣ REASON"]
         L1["Build prompt"]
         L2["Azure OpenAI call"]
         L3["Generate reasoning"]
     end
 
-    subgraph Node7["7️⃣ RESPOND"]
+    subgraph Node8["8️⃣ RESPOND"]
         O1["Build QueryResponse"]
         O2["Include timings"]
     end
 
+    subgraph Node9["9️⃣ LOG EPISODE<br/><i>CoALA: episodic write</i>"]
+        LG1["Importance heuristic"]
+        LG2["Append to events.db"]
+    end
+
     subgraph Output["📤 Output"]
-        OUT["results + reasoning\n+ graph_context\n+ scratchpad_context"]
+        OUT["results + reasoning<br/>+ graph_context<br/>+ scratchpad_context<br/>+ recalled_episodes"]
     end
 
     Input --> Node1
@@ -58,24 +70,31 @@ flowchart LR
     Node4 --> Node5
     Node5 --> Node6
     Node6 --> Node7
-    Node7 --> Output
+    Node7 --> Node8
+    Node8 --> Node9
+    Node9 --> Output
 
-    GDB[("🕸️ Graph\nStore")]
-    SPD[("📝 Scratchpad\nStore")]
-    VDB[("📊 Vector\nStore")]
-    LLM[("🧠 Azure\nOpenAI")]
+    GDB[("🕸️ Graph<br/>Store")]
+    SPD[("📝 Scratchpad<br/>SQLite")]
+    EPS[("⏱️ Episodic<br/>events.db")]
+    VDB[("📊 Vector<br/>Store")]
+    LLM[("🧠 Azure<br/>OpenAI")]
 
     Node2 <-.-> GDB
     Node3 <-.-> SPD
-    Node4 <-.-> VDB
-    Node6 <-.-> LLM
+    Node4 <-.-> EPS
+    Node5 <-.-> VDB
+    Node7 <-.-> LLM
+    Node9 <-.-> EPS
 
     classDef inputNode fill:#e3f2fd,stroke:#1565c0
     classDef nodeBox fill:#e8f5e9,stroke:#2e7d32
+    classDef episodicNode fill:#fff3e0,stroke:#e65100,stroke-width:3px
     classDef storeNode fill:#fce4ec,stroke:#c2185b
     classDef outputNode fill:#f3e5f5,stroke:#7b1fa2
 
-    class Q,F inputNode
-    class Node1,Node2,Node3,Node4,Node5,Node6,Node7 nodeBox
-    class GDB,SPD,VDB,LLM storeNode
+    class Q,F,SID inputNode
+    class Node1,Node2,Node3,Node5,Node6,Node7,Node8 nodeBox
+    class Node4,Node9 episodicNode
+    class GDB,SPD,EPS,VDB,LLM storeNode
     class OUT outputNode

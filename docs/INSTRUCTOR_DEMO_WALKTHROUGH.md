@@ -2,6 +2,8 @@
 
 **For Tim Warner's O'Reilly Course**
 
+> **April 2026 update — CoALA refit:** the server now exposes **28 MCP tools** (was 23) and a **9-node LangGraph pipeline** (was 7) implementing all four CoALA memory tiers. For the canonical four-tier classroom demo path, use **[tutorials/coala-memory-walkthrough.md](tutorials/coala-memory-walkthrough.md)** as your primary script. This document remains useful for component-by-component drill-downs (Scratchpad section E, Graph section F).
+
 This document provides step-by-step demo instructions with real sample data, prompts, and expected outputs. Everything is ready to copy-paste.
 
 ---
@@ -817,11 +819,14 @@ Create a dependency: WRN-00008 depends on WRN-00014
 
 ## G. Full RAG Pipeline Demo
 
-This demonstrates the complete 7-node LangGraph pipeline:
+This demonstrates the complete **9-node CoALA-tiered LangGraph pipeline**:
 
 ```
-parse_intent -> query_graph -> inject_scratchpad -> retrieve -> compress_context -> reason -> respond
+parse_intent -> query_graph -> inject_scratchpad -> recall_episodes ->
+retrieve -> compress_context -> reason -> respond -> log_episode
 ```
+
+> **For the four-tier classroom path** (Working / Episodic / Semantic / Procedural in one continuous demo with the consolidation cycle), see [tutorials/coala-memory-walkthrough.md](tutorials/coala-memory-walkthrough.md). It supersedes this section for the April 2026 class.
 
 ### Setup for Full Demo
 

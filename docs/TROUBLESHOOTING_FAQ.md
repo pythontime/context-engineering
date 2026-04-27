@@ -1265,6 +1265,6 @@ Found a solution to a problem not listed here? Please:
 
 **Last Updated**: 2026-04-26
 **Maintainer**: Course instructor
-**Version**: 1.1 (Python 3.13 pin, `data/graph/knowledge.db` path, `warnerco-restart`, 23 MCP tools)
+**Version**: 1.2 (CoALA four-tier refit — 28 MCP tools, 9-node LangGraph pipeline, episodic memory + consolidation cycle, `memory://coala-overview` resource)
 
 

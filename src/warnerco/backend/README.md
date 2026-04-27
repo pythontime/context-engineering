@@ -1,26 +1,23 @@
 # WARNERCO Robotics Schematica
 
-Agentic robot schematics system with semantic memory. Features LangGraph orchestration, FastMCP tools, and a 3-tier data store architecture.
+Agentic robot schematics system that exercises **all four CoALA memory tiers** (Working / Episodic / Semantic / Procedural) in one coherent app. Built on FastAPI + FastMCP + LangGraph with a 9-node hybrid RAG pipeline.
 
-## Data Store Architecture
+## Memory Architecture (CoALA Four-Tier)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Memory Abstraction Layer                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐ │
-│  │    JSON     │    │   Chroma    │    │   Azure AI Search   │ │
-│  │   (source   │───▶│  (vectors)  │    │   (enterprise)      │ │
-│  │   of truth) │    │   local     │    │   cloud             │ │
-│  └─────────────┘    └─────────────┘    └─────────────────────┘ │
-│         │                  │                     │              │
-│         └──────────────────┴─────────────────────┘              │
-│                            │                                     │
-│                    All backends use JSON                         │
-│                    as the source of truth                        │
-└─────────────────────────────────────────────────────────────────┘
++--------------------------------------------------------------------------+
+|  Four CoALA Memory Tiers (Sumers et al. 2024)                            |
+|  +------------+  +-----------+  +----------+  +------------------------+ |
+|  | Working    |  | Episodic  |  | Semantic |  | Procedural             | |
+|  | Scratchpad |  | events.db |  | Vector   |  | MCP Prompts (versioned)| |
+|  | (SQLite)   |  | (SQLite)  |  | store    |  | catalog://procedural   | |
+|  +------------+  +-----------+  +----------+  +------------------------+ |
++--------------------------------------------------------------------------+
+|  Consolidation ("sleep cycle"): scratchpad+episodic --(ctx.sample)--> semantic |
++--------------------------------------------------------------------------+
 ```
+
+The **semantic tier** is itself a 3-tier abstraction (JSON source-of-truth → Chroma local vectors → Azure AI Search enterprise). All semantic backends use JSON as the source of truth.
 
 ## Quick Start
 
@@ -106,36 +103,58 @@ Create `.vscode/mcp.json` in your workspace:
 
 ## Available MCP Tools
 
-The server exposes **23 MCP tools** across vector/schema, knowledge graph, scratchpad, and tool-discovery surfaces.
+The server exposes **28 MCP tools** plus **11 resources** and **5 prompts**, organized by CoALA tier:
 
-| Tool | Description |
-|------|-------------|
-| `warn_list_robots` | List robot schematics with optional filtering |
-| `warn_get_robot` | Get detailed information about a specific schematic |
-| `warn_semantic_search` | Search schematics using natural language |
-| `warn_memory_stats` | Get statistics about the memory system |
-| `warn_add_relationship` | Create graph triplet (subject, predicate, object) |
-| `warn_graph_neighbors` | Get connected entities from knowledge graph |
-| `warn_graph_path` | Find shortest path between entities |
-| `warn_graph_stats` | Graph node/edge/density statistics |
-| `warn_scratchpad_write` | Store session observation with optional minimization |
-| `warn_scratchpad_read` | Retrieve session entries with filtering |
-| `warn_scratchpad_clear` | Clear session entries by subject or age |
-| `warn_scratchpad_stats` | Token budget and savings statistics |
-| `warn_search_tools` | Keyword-search the tool catalog at `name`, `summary`, or `full` detail |
-| `warn_describe_tool` | Return name, description, and input/output schema for a single tool |
+| Group | Tools |
+|-------|-------|
+| **Semantic memory (vector store)** | `warn_list_robots`, `warn_get_robot`, `warn_semantic_search`, `warn_memory_stats`, `warn_index_schematic`, `warn_compare_schematics`, `warn_create_schematic`, `warn_update_schematic`, `warn_delete_schematic`, `warn_explain_schematic` |
+| **Interactive (Elicitation/Sampling)** | `warn_guided_search`, `warn_feedback_loop`, `warn_replacement_advisor` |
+| **Knowledge graph** | `warn_add_relationship`, `warn_graph_neighbors`, `warn_graph_path`, `warn_graph_stats` |
+| **Working memory (CoALA Tier 1 — scratchpad)** | `warn_scratchpad_write`, `warn_scratchpad_read`, `warn_scratchpad_clear`, `warn_scratchpad_stats` |
+| **Episodic memory (CoALA Tier 2)** | `warn_episodic_log`, `warn_episodic_recall`, `warn_episodic_recent`, `warn_episodic_stats` |
+| **Consolidation (sleep cycle)** | `warn_consolidate_memory` |
+| **Tool discovery (progressive loading)** | `warn_search_tools`, `warn_describe_tool` |
+
+### Resources
+
+| URI | Purpose |
+|-----|---------|
+| `memory://overview` | Backend snapshot |
+| `memory://recent-queries` | Telemetry of recent retrievals |
+| `memory://architecture` | Static architecture explainer |
+| `memory://coala-overview` | **Live four-tier CoALA snapshot** (the class-anchor resource) |
+| `memory://procedural-catalog` | Versioned MCP prompts as procedural memory |
+| `schematic://{id}` | Single schematic as Markdown |
+| `catalog://categories`, `catalog://models` | Catalog enumerations |
+| `help://tools`, `help://resources`, `help://prompts` | Self-documenting help |
+| `mcp://capabilities` | Server capabilities introspection |
+
+### Episodic recall (Park et al.)
+
+`warn_episodic_recall` returns events scored by:
+
+```
+total = α_recency · 0.5^(hours_since / half_life)
+      + α_importance · stored_importance
+      + α_relevance · bag_of_words_cosine(query, summary+content)
+```
+
+The per-event score breakdown is exposed in the response so students can see why each memory surfaced. Defaults: `α_recency=0.4`, `α_importance=0.3`, `α_relevance=0.3`, `half_life_hours=24`. Override via `EPISODIC_*` env vars.
+
+### Consolidation (sleep cycle)
+
+`warn_consolidate_memory` uses **MCP Sampling** (`ctx.sample()`) to read recent scratchpad + episodic memory, extract durable facts, and write them as synthetic `Schematic` records into the vector store (tagged `category=consolidated_fact`, `model=MEMORY`, `id=FACT-*`). Logs an `OBSERVATION` back to episodic memory so consolidation itself becomes a memory.
+
+**ADD-only**: no Mem0 AUDN-style dedup. Production agents would extend this with UPDATE/DELETE/NOOP semantics.
 
 ### Progressive Tool Loading
 
-`warn_search_tools` and `warn_describe_tool` implement Anthropic's progressive tool-loading pattern: instead of paying the full schema tax up front, clients discover tools cheaply and fetch detail on demand. Both tools deliberately exclude themselves and each other from results to avoid recursive confusion.
+`warn_search_tools` and `warn_describe_tool` implement Anthropic's progressive tool-loading pattern: clients discover tools cheaply and fetch detail on demand. Both tools self-exclude from search results, so `count` is up to 26 even when `total` is 28.
 
-Measured on this server:
-
-| Detail level | Tokens | Saving vs. full |
-|--------------|--------|-----------------|
-| Full schemas (all 23 tools) | ~9,064 | baseline |
-| `summary` index | ~533 | ~95% |
-| `name`-only index | ~176 | ~98% |
+```python
+warn_search_tools(query="episodic", detail="summary")  # 95%+ token savings vs full schemas
+warn_describe_tool(name="warn_consolidate_memory")     # full schema for one tool
+```
 
 Example calls:
 
@@ -172,8 +191,16 @@ See `.env.example` for full documentation. Key variables:
 | `MEMORY_BACKEND` | `json`, `chroma`, or `azure_search` | Yes |
 | `AZURE_SEARCH_ENDPOINT` | AI Search endpoint | If using azure_search |
 | `AZURE_SEARCH_KEY` | AI Search admin key | If using azure_search |
-| `AZURE_OPENAI_ENDPOINT` | OpenAI endpoint | For LangGraph reasoning |
-| `AZURE_OPENAI_API_KEY` | OpenAI key | For LangGraph reasoning |
+| `AZURE_OPENAI_ENDPOINT` | OpenAI endpoint | For LangGraph reasoning + sampling |
+| `AZURE_OPENAI_API_KEY` | OpenAI key | For LangGraph reasoning + sampling |
+| `SCRATCHPAD_DB_PATH` | Working-memory SQLite path | No (default `data/scratchpad/notes.db`) |
+| `SCRATCHPAD_INJECT_BUDGET` | Tokens for LangGraph scratchpad injection | No (default 1500) |
+| `EPISODIC_DB_PATH` | Episodic events SQLite path | No (default `data/episodic/events.db`) |
+| `EPISODIC_MAX_RETRIEVAL_K` | Top-k for episodic recall | No (default 5) |
+| `EPISODIC_RECENCY_HALF_LIFE_HOURS` | Park et al. half-life | No (default 24.0) |
+| `EPISODIC_WEIGHT_RECENCY` | α_recency | No (default 0.4) |
+| `EPISODIC_WEIGHT_IMPORTANCE` | α_importance | No (default 0.3) |
+| `EPISODIC_WEIGHT_RELEVANCE` | α_relevance | No (default 0.3) |
 
 ## Development
 

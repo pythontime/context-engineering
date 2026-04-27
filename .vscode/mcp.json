@@ -9,6 +9,22 @@
       },
       "type": "stdio"
     },
+    "warnerco-coala-memory": {
+      "command": "uv",
+      "args": ["run", "warnerco-mcp"],
+      "cwd": "${workspaceFolder}/src/warnerco/backend",
+      "env": {
+        "MEMORY_BACKEND": "chroma",
+        "EPISODIC_DB_PATH": "data/episodic/events.db",
+        "EPISODIC_MAX_RETRIEVAL_K": "5",
+        "EPISODIC_RECENCY_HALF_LIFE_HOURS": "24.0"
+      },
+      "type": "stdio",
+      "dev": {
+        "watch": "src/warnerco/backend/app/**/*.py",
+        "debug": { "type": "python" }
+      }
+    },
     "warnerco-schematica-azure-apim": {
       "url": "https://warnerco-apim.azure-api.net/mcp",
       "transport": "http",

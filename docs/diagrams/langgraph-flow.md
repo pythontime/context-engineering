@@ -1,4 +1,6 @@
-# WARNERCO Robotics Schematica - LangGraph Hybrid RAG Flow
+# WARNERCO Robotics Schematica - LangGraph CoALA-Tiered RAG Flow
+
+> **April 2026 update:** the pipeline is now **9 nodes** (was 7) with explicit episodic memory recall + write. Mapping to CoALA tiers: `inject_scratchpad` = working, `recall_episodes` + `log_episode` = episodic, `retrieve` = semantic, MCP Prompts = procedural. Canonical `.mmd` source: [schematica-langgraph-pipeline.mmd](schematica-langgraph-pipeline.mmd). The legacy 7-node mermaid below remains as reference; treat the `.mmd` file as authoritative.
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#2d5016', 'primaryTextColor': '#fff', 'primaryBorderColor': '#1a3009', 'lineColor': '#4a5568', 'fontFamily': 'JetBrains Mono, monospace'}}}%%

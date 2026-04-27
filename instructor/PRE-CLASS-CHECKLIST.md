@@ -33,6 +33,18 @@ Run top to bottom. If a step fails, fix before moving on; nothing below assumes 
     ```
   - Expect: indexer logs ~25 schematics, ~117 entities, ~221 relationships.
 
+- [ ] **Wipe working + episodic memory** (so the four-tier demo starts from zero)
+  ```bash
+  rm -f data/scratchpad/notes.db data/episodic/events.db
+  ```
+  - Both DBs auto-recreate on first write. The `memory://coala-overview` resource will show `working: 0`, `episodic: 0` at the start of class.
+
+- [ ] **Chroma vector store is indexed** (semantic memory, CoALA Tier 3)
+  ```bash
+  uv run python -c "from app.adapters.chroma_store import ChromaMemoryStore; import asyncio; asyncio.run(ChromaMemoryStore().index_all())"
+  ```
+  - Expect: `memory://coala-overview` shows `semantic.current_count: 25`.
+
 ## 3. Server Lifecycle
 
 - [ ] **Free port 8000**

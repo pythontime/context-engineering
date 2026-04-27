@@ -42,55 +42,59 @@ The `warnerco-restart` command (from `scripts/restart_server.py`) terminates any
 
 ## Course Structure (4 x 50 Minutes)
 
-| Segment | Topic                  | Focus                                                           |
-| ------- | ---------------------- | --------------------------------------------------------------- |
-| **1**   | All About Context      | Token economics, context loss types, why RAG isn't enough       |
-| **2**   | All About MCP          | FastMCP, FastAPI, tools, resources, prompts, elicitations       |
-| **3**   | Semantic Memory Stores | JSON, ChromaDB, Azure AI Search, Graph Memory, Scratchpad       |
-| **4**   | MCP in Production      | Claude Desktop, Claude Code, VS Code, GitHub Copilot, LangGraph |
+| Segment | Topic                  | Focus                                                                  |
+| ------- | ---------------------- | ---------------------------------------------------------------------- |
+| **1**   | All About Context      | Token economics, context loss types, why RAG isn't enough              |
+| **2**   | All About MCP          | FastMCP, FastAPI, tools, resources, prompts, elicitations              |
+| **3**   | CoALA Four-Tier Memory | Working / Episodic / Semantic / Procedural — all four tiers in one app |
+| **4**   | MCP in Production      | Claude Desktop, Claude Code, VS Code, GitHub Copilot, LangGraph        |
 
 ---
 
 ## WARNERCO Schematica Architecture
 
-The flagship teaching application demonstrates production MCP patterns with a 7-node hybrid RAG pipeline:
+The flagship teaching application exercises **all four CoALA memory tiers** (Sumers et al. 2024) in a 9-node LangGraph pipeline:
 
 ```
-+---------------------------------------------------------------+
-|                     FastAPI + FastMCP                         |
-+---------------------------------------------------------------+
-|  LangGraph Flow (7-node Hybrid RAG)                           |
-|  parse_intent -> query_graph -> inject_scratchpad -> retrieve |
-|  -> compress -> reason -> respond                             |
-+---------------------------------------------------------------+
-|  Hybrid Memory Layer                                          |
-|  +-------------------+  +-------------------+  +-------------+ |
-|  | Vector Store      |  | Graph Store       |  | Scratchpad  | |
-|  | JSON -> Chroma -> |  | SQLite + NetworkX |  | In-memory   | |
-|  | Azure AI Search   |  | (Knowledge Graph) |  | (Session)   | |
-|  +-------------------+  +-------------------+  +-------------+ |
-+---------------------------------------------------------------+
++--------------------------------------------------------------------------+
+|                          FastAPI + FastMCP                               |
++--------------------------------------------------------------------------+
+|  LangGraph Flow (9-node CoALA-tiered RAG)                                |
+|  parse_intent -> query_graph -> inject_scratchpad -> recall_episodes ->  |
+|  retrieve -> compress_context -> reason -> respond -> log_episode        |
++--------------------------------------------------------------------------+
+|  Four CoALA Memory Tiers                                                 |
+|  +------------+  +-----------+  +----------+  +------------------------+ |
+|  | Working    |  | Episodic  |  | Semantic |  | Procedural             | |
+|  | Scratchpad |  | events.db |  | Vector   |  | MCP Prompts (versioned)| |
+|  | (SQLite)   |  | (SQLite)  |  | store    |  | catalog://procedural   | |
+|  +------------+  +-----------+  +----------+  +------------------------+ |
++--------------------------------------------------------------------------+
+|  Consolidation ("sleep cycle"): scratchpad+episodic --(ctx.sample)--> semantic |
++--------------------------------------------------------------------------+
 ```
 
-### Memory Store Comparison
+### CoALA Tier Reference
 
-| Feature              | JSON         | ChromaDB      | Azure AI Search    | Graph       | Scratchpad     |
-| -------------------- | ------------ | ------------- | ------------------ | ----------- | -------------- |
-| Semantic Search      | No           | Yes           | Yes                | No          | No             |
-| Relationship Queries | No           | No            | No                 | Yes         | No             |
-| Session Memory       | No           | No            | No                 | No          | Yes            |
-| Best For             | Prototyping  | Local dev     | Production         | Connections | Working memory |
+| Tier        | What it stores                                | Backed by                            | LangGraph node                          |
+| ----------- | --------------------------------------------- | ------------------------------------ | --------------------------------------- |
+| Working     | Session observations & inferences             | `data/scratchpad/notes.db` (SQLite)  | `inject_scratchpad`                     |
+| Episodic    | Timestamped events with importance            | `data/episodic/events.db` (SQLite)   | `recall_episodes` + `log_episode`       |
+| Semantic    | Durable facts (incl. consolidated `FACT-*`)   | Vector store (Chroma / Azure / JSON) | `retrieve`                              |
+| Procedural  | Versioned skills/workflows                    | MCP `@mcp.prompt()` registrations    | (user-invoked, not in pipeline)         |
+
+Episodic recall uses **Park et al.'s scoring formula** — `α_recency · 0.5^(hours/half_life) + α_importance · stored + α_relevance · cosine(query, summary)` — and `warn_episodic_recall` returns the per-event score breakdown so students can see why each memory surfaced.
 
 The knowledge graph is indexed at `src/warnerco/backend/data/graph/knowledge.db` with **117 entities** and **221 relationships** across 6 predicates (`has_tag`, `compatible_with`, `belongs_to_model`, `has_status`, `has_category`, `contains`).
 
 ### Progressive Tool Loading
 
-The server now registers **23 MCP tools**, including two discovery tools that implement progressive tool loading per Anthropic's "code execution with MCP" guidance:
+The server registers **28 MCP tools**, **11 resources**, and **5 prompts**. Two meta-discovery tools implement progressive tool loading per Anthropic's "code execution with MCP" guidance:
 
 - `warn_search_tools(query, detail, limit)` — keyword discovery with detail levels `name`, `summary`, `full`
 - `warn_describe_tool(name)` — full schema for a single tool by name
 
-Measured token savings on this server vs. shipping all full schemas up front: **95% (summary)** and **98% (name-only)** — **9064 tokens** drops to **533** (summary) and **176** (name-only). Clients can list tools cheaply, then pull full schemas only for what they actually plan to call.
+Both meta-tools self-exclude from `warn_search_tools` results, so `count` is up to 26 even when `total` is 28. Clients can list tools cheaply, then pull full schemas only for what they actually plan to call.
 
 ---
 
@@ -109,11 +113,13 @@ context-engineering/
 ```
 
 **For development details, see [CLAUDE.md](CLAUDE.md)** - the source of truth for:
-- Complete MCP tool reference
+- Complete MCP tool reference (28 tools)
 - API endpoint documentation
-- Environment variable configuration
-- LangGraph pipeline details
-- Graph and Scratchpad Memory features
+- Environment variable configuration (incl. `EPISODIC_*`)
+- 9-node LangGraph pipeline details
+- All four CoALA memory tiers (Working / Episodic / Semantic / Procedural)
+
+**For the classroom demo:** see [docs/tutorials/coala-memory-walkthrough.md](docs/tutorials/coala-memory-walkthrough.md) — the ~4-minute four-tier classroom path.
 
 ---
 
@@ -136,9 +142,13 @@ context-engineering/
 }
 ```
 
-### VS Code
+### Claude Code (project scope)
 
-See `.vscode/mcp.json` in the repository for local and Azure APIM configurations.
+`.claude/mcp.json` is checked in with two entries pointing at the same server: `warnerco-schematica-claude` and `warnerco-coala-memory` (the second pre-pins the episodic-memory env vars for class demos).
+
+### VS Code Copilot
+
+`.vscode/mcp.json` is checked in with `warnerco-schematica-vscode` (basic) and `warnerco-coala-memory` (with `dev.watch` for hot-reload during class). To list servers in VS Code: `Cmd/Ctrl+Shift+P → MCP: List Servers`.
 
 ---
 

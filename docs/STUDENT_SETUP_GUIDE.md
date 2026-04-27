@@ -321,8 +321,9 @@ cd src/warnerco/backend
 # Start with MCP Inspector (opens browser at http://localhost:5173)
 npx @modelcontextprotocol/inspector uv run warnerco-mcp
 
-# You should see 23 tools listed: warn_list_robots, warn_get_robot,
-# warn_search_tools, warn_describe_tool, the graph/scratchpad tools, etc.
+# You should see 28 tools listed: warn_list_robots, warn_get_robot, warn_semantic_search,
+# warn_episodic_log/recall/recent/stats, warn_consolidate_memory, the graph/scratchpad tools,
+# warn_search_tools/warn_describe_tool, etc.
 # Press Ctrl+C to stop
 ```
 

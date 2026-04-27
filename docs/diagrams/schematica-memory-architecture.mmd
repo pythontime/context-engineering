@@ -1,78 +1,106 @@
 %%{init: {'theme': 'base'}}%%
 flowchart TB
     subgraph Queries["🔍 Query Types"]
-        Q1["'thermal sensors for cold'\n→ Semantic Search"]
-        Q2["'what connects to WRN-00006?'\n→ Graph Traversal"]
-        Q3["'based on what we discussed'\n→ Session Memory"]
+        Q1["'thermal sensors for cold'<br/>→ Semantic Search"]
+        Q2["'what connects to WRN-00006?'<br/>→ Graph Traversal"]
+        Q3["'based on what we discussed'<br/>→ Working Memory"]
+        Q4["'what did we ask 5 turns ago?'<br/>→ Episodic Recall"]
+        Q5["/diagnostic_prompt WRN-00006<br/>→ Procedural Skill"]
     end
 
-    subgraph Vector["📊 TIER 1: Vector Store"]
+    subgraph Working["📝 TIER 1 — WORKING (CoALA)"]
         direction TB
-        subgraph Backends["Backend Options (MEMORY_BACKEND)"]
-            JSON["JSON\n─────\nKeyword match\n~100ms startup\nNo deps"]
-            CHROMA["Chroma\n─────\nLocal vectors\nsentence-transformers\n~2-5s startup"]
-            AZURE["Azure AI Search\n─────\nHybrid search\nEnterprise scale\nCloud hosted"]
-        end
-        VAPI["MemoryStore Interface\nlist() | get() | search() | index()"]
-    end
-
-    subgraph Graph["🕸️ TIER 2: Graph Store"]
-        direction TB
-        GAPI["GraphStore API\nadd_entity | add_relationship\nget_neighbors | shortest_path"]
-        subgraph Predicates["Relationship Types (6)"]
-            P1["has_tag"]
-            P2["compatible_with"]
-            P3["belongs_to_model"]
-            P4["has_status"]
-            P5["has_category"]
-            P6["contains"]
-        end
-        GDB[("SQLite + NetworkX\n117 entities\n221 relationships\n6 predicates")]
-    end
-
-    subgraph Scratch["📝 TIER 3: Scratchpad"]
-        direction TB
-        SAPI["ScratchpadStore API\nwrite() | read() | clear()\nget_context_for_injection()"]
-        subgraph Cognitive["Cognitive Predicates"]
+        SAPI["ScratchpadStore API<br/>write() | read() | clear()<br/>get_context_for_injection()"]
+        subgraph Cognitive["Predicates"]
             C1["observed"]
             C2["inferred"]
             C3["relevant_to"]
             C4["contradicts"]
         end
-        SCONF["Config: 2000 tokens max\n30 min TTL | LLM minimize"]
+        SDB[("SQLite<br/>data/scratchpad/notes.db")]
     end
 
-    subgraph Data["📁 Persistent Data"]
-        SJSON[("schematics.json\n25 Robot Schematics")]
-        SGRPH[("graph.db\nKnowledge Graph")]
-        SCHRM[("chroma_db/\nVector Index")]
+    subgraph Episodic["⏱️ TIER 2 — EPISODIC (CoALA)"]
+        direction TB
+        EAPI["EpisodicStore API<br/>log() | recall() | recent()"]
+        subgraph Recall["Park et al. recall"]
+            R1["α_recency · 0.5^(hours/half_life)"]
+            R2["α_importance · stored"]
+            R3["α_relevance · cosine(query, summary)"]
+        end
+        EDB[("SQLite<br/>data/episodic/events.db")]
+    end
+
+    subgraph Semantic["📊 TIER 3 — SEMANTIC (CoALA)"]
+        direction TB
+        VAPI["MemoryStore Interface<br/>list() | get() | search() | upsert()"]
+        subgraph Backends["Backend (MEMORY_BACKEND)"]
+            JSON["JSON<br/>keyword fallback"]
+            CHROMA["Chroma<br/>local vectors"]
+            AZURE["Azure AI Search<br/>enterprise"]
+        end
+        VDB[("Vector store<br/>+ FACT-* consolidated facts")]
+    end
+
+    subgraph Procedural["📚 TIER 4 — PROCEDURAL (CoALA)"]
+        direction TB
+        PAPI["MCP Prompts<br/>@mcp.prompt() + version metadata"]
+        subgraph Prompts["Versioned Skills (5)"]
+            P1["diagnostic_prompt"]
+            P2["comparison_prompt"]
+            P3["search_strategy_prompt"]
+            P4["maintenance_report_prompt"]
+            P5["schematic_review_prompt"]
+        end
+        PCAT["Resource:<br/>memory://procedural-catalog"]
+    end
+
+    subgraph Graph["🕸️ Knowledge Graph (alongside semantic)"]
+        direction TB
+        GAPI["GraphStore<br/>SQLite + NetworkX"]
+        GDB[("data/graph/<br/>knowledge.db<br/>117 entities, 221 rel")]
+    end
+
+    subgraph Consolidation["💤 Consolidation (sleep cycle)"]
+        CCY["consolidate_memory()<br/>uses ctx.sample()"]
     end
 
     Q1 --> VAPI
     Q2 --> GAPI
     Q3 --> SAPI
+    Q4 --> EAPI
+    Q5 --> PAPI
 
     VAPI --> Backends
-    JSON --> SJSON
-    CHROMA --> SJSON
-    CHROMA --> SCHRM
-    AZURE --> SJSON
+    JSON --> VDB
+    CHROMA --> VDB
+    AZURE --> VDB
 
-    GAPI --> Predicates
+    SAPI --> SDB
+    EAPI --> EDB
     GAPI --> GDB
-    GDB --> SGRPH
+    PAPI --> Prompts
+    Prompts --> PCAT
 
-    SAPI --> Cognitive
-    SAPI --> SCONF
+    SDB -.->|"+"| CCY
+    EDB -.->|"+"| CCY
+    CCY -.->|"FACT-*"| VDB
+    CCY -.->|"OBSERVATION"| EDB
 
     classDef queryNode fill:#e3f2fd,stroke:#1565c0
-    classDef vectorNode fill:#c8e6c9,stroke:#2e7d32
-    classDef graphNode fill:#ffe0b2,stroke:#e65100
-    classDef scratchNode fill:#f8bbd9,stroke:#c2185b
+    classDef workingNode fill:#f8bbd9,stroke:#c2185b
+    classDef episodicNode fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    classDef semanticNode fill:#c8e6c9,stroke:#2e7d32
+    classDef proceduralNode fill:#d1c4e9,stroke:#4527a0
+    classDef graphNode fill:#ffe0b2,stroke:#bf360c
     classDef dataNode fill:#cfd8dc,stroke:#546e7a
+    classDef consolNode fill:#fff9c4,stroke:#f57f17,stroke-width:3px
 
-    class Q1,Q2,Q3 queryNode
-    class JSON,CHROMA,AZURE,VAPI vectorNode
-    class GAPI,P1,P2,P3,P4,P5,P6,GDB graphNode
-    class SAPI,C1,C2,C3,C4,SCONF scratchNode
-    class SJSON,SGRPH,SCHRM dataNode
+    class Q1,Q2,Q3,Q4,Q5 queryNode
+    class SAPI,C1,C2,C3,C4 workingNode
+    class EAPI,R1,R2,R3 episodicNode
+    class VAPI,JSON,CHROMA,AZURE semanticNode
+    class PAPI,P1,P2,P3,P4,P5,PCAT proceduralNode
+    class GAPI graphNode
+    class SDB,EDB,VDB,GDB dataNode
+    class CCY consolNode
