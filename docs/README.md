@@ -22,7 +22,8 @@ Located in [diagrams/](diagrams/):
 
 ## Tutorials
 
-- **[tutorials/coala-memory-walkthrough.md](tutorials/coala-memory-walkthrough.md)** — **Class anchor**: ~4-minute four-tier classroom demo path (Working / Episodic / Semantic / Procedural)
+- **[tutorials/coala-explainer.md](tutorials/coala-explainer.md)** — **Read this first.** What CoALA is, and where each of the four memory tiers lives in the WARNERCO codebase. ~15 minute self-paced read.
+- **[tutorials/coala-memory-walkthrough.md](tutorials/coala-memory-walkthrough.md)** — **Class anchor.** ~4-minute four-tier classroom demo path with paste-ready Inspector calls.
 - **[tutorials/graph-memory-tutorial.md](tutorials/graph-memory-tutorial.md)** - Hands-on knowledge graph tutorial
 - **[tutorials/progressive-tool-loading.md](tutorials/progressive-tool-loading.md)** - Cheap tool discovery via `warn_search_tools` / `warn_describe_tool`
 - **[tutorials/demo-sampling-vscode.md](tutorials/demo-sampling-vscode.md)** - MCP Sampling demo in VS Code

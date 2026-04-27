@@ -119,6 +119,8 @@ context-engineering/
 - 9-node LangGraph pipeline details
 - All four CoALA memory tiers (Working / Episodic / Semantic / Procedural)
 
+**For the framework explainer (read this first):** see [docs/tutorials/coala-explainer.md](docs/tutorials/coala-explainer.md) — what CoALA is and where each tier lives in the WARNERCO codebase.
+
 **For the classroom demo:** see [docs/tutorials/coala-memory-walkthrough.md](docs/tutorials/coala-memory-walkthrough.md) — the ~4-minute four-tier classroom path.
 
 ---

@@ -290,6 +290,8 @@ uv run python scripts/index_graph.py
 
 ### CoALA Four-Tier Memory (Sumers et al. 2024)
 
+> **For the from-first-principles teaching version, see [docs/tutorials/coala-explainer.md](docs/tutorials/coala-explainer.md).** It walks the framework + every code pointer in ~15 minutes.
+
 The 9-node LangGraph pipeline maps each node to a CoALA tier so a class can see all four tiers exercised in one turn:
 
 | CoALA Tier | What it stores | Backed by | LangGraph node | Read tools | Write tools |
